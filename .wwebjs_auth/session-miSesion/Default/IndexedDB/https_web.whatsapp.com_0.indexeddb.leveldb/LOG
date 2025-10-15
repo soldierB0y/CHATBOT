@@ -1,0 +1,4 @@
+2025/10/15-19:59:59.403 7bf0 Reusing MANIFEST C:\Users\UserGPC\Documents\projects\chatbot1\.wwebjs_auth\session-miSesion\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/10/15-19:59:59.404 7bf0 Recovering log #689
+2025/10/15-19:59:59.477 7bf0 Reusing old log C:\Users\UserGPC\Documents\projects\chatbot1\.wwebjs_auth\session-miSesion\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000689.log 
+2025/10/15-20:00:03.374 5140 Manual compaction at level-0 from '\x00?\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00@\x00\x00\x00' @ 0 : 0; will stop at (end)
