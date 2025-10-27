@@ -9,7 +9,7 @@ const api = {
   onDisconnected: (callback) => ipcRenderer.on('disconnected', callback),
   onChangeState: (callback) => ipcRenderer.on('changeState', callback),
   onInitError: (callback) => ipcRenderer.on('initError', callback),
-  onMsgResult:(callback)=> ipcRenderer.on('initError',callback),
+  onMsgResult: (callback) => ipcRenderer.on('onMsgResult', callback),
   onSessionClose:(callback)=>ipcRenderer.on('onSessionClose',callback),
   closeSession:()=>ipcRenderer.invoke('closeSession'),
   getnewQR:()=>ipcRenderer.invoke('getNewQR'),
@@ -22,7 +22,11 @@ const api = {
   getDebtors:()=> ipcRenderer.invoke('getDebtors'),
   getDateSends:()=>ipcRenderer.invoke('getDateSends'),
   getWs:()=>ipcRenderer.invoke('getWs'),
-  updateExcCustomers:(excC)=> ipcRenderer.invoke('updateExcCustomers',excC)
+  updateExcCustomers:(excC)=> ipcRenderer.invoke('updateExcCustomers',excC),
+  sendMsgFromExcel: (fileDir)=> ipcRenderer.invoke('sendMsgFromExcel',fileDir)
+  ,
+  // recibir un ArrayBuffer/Uint8Array desde renderer y enviarlo al main
+  sendExcelBuffer: (uint8arr) => ipcRenderer.invoke('sendExcelBuffer', uint8arr)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

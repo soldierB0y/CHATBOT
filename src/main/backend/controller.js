@@ -4,6 +4,8 @@ import { Customer, Venta } from "./model";
 import * as XLSX from 'xlsx';
 import path from 'path';
 import {app} from 'electron'
+
+
 export const testConnection= async ()=>{
     try {
         await DB.authenticate();
@@ -24,9 +26,10 @@ export const getDebtorCustomers = async () => {
                 'Numero_Cliente',
                 'Telefono',
                 'Nombre_Cliente',
-                [fn('SUM', col('total')), 'total_facturas'],
-                [fn('SUM', col('Abono')), 'total_abonos'],
-                [literal('SUM(total) - SUM(Abono)'), 'restante']
+            [fn('SUM', col('total')), 'total_facturas'],
+            // COALESCE SUM(Abono) to 0 so restante computes correctly when Abono is NULL
+            [literal('COALESCE(SUM(Abono), 0)'), 'total_abonos'],
+            [literal('SUM(total) - COALESCE(SUM(Abono), 0)'), 'restante']
             ],
             group: ['Numero_Cliente', 'Telefono', 'Nombre_Cliente'],
             raw: true
@@ -121,4 +124,45 @@ export const updateExcCustomers = async (excC) => {
         console.log(error);
         return { res: false, result: [], message: error.message };
     }
+}
+
+
+export const sendMsgFromExcel= async (excelDir)=>{
+    try {
+        const wookbook= XLSX.readFile(excelDir);
+        const sheet= wookbook.Sheets["Sheet1"];
+        const data= XLSX.utils.sheet_to_json(sheet);
+        console.log(data);
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+
+export const sendMsg= async (debtorsToSendMsg)=>{
+      const result= {enviados:[],fallidos:[]};
+
+     for( let i=0; i < debtorsToSendMsg.length; i++)
+          {
+              const name= debtorsToSendMsg[i].Nombre_Cliente;
+              let tel= debtorsToSendMsg[i].Telefono || ""
+              if (tel[0]!="1")  tel="1"+tel; 
+              const numberCorrected =tel+'@c.us';
+              const totalOfBill= debtorsToSendMsg[i].total_facturas;
+              const payed= debtorsToSendMsg[i].total_abonos;
+              const remainingDebt = debtorsToSendMsg[i].restante;
+            try {
+              const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt}DOP lo mas pronto posible. `; 
+              await client.sendMessage(numberCorrected,msg);
+              await client.sendMessage(numberCorrected,"Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)")
+              result.enviados.push({name:name,number:numberCorrected,remainingDebt:remainingDebt})
+              
+            } catch (error) {
+              result.fallidos.push({name:name,number:numberCorrected,remainingDebt:remainingDebt})
+            }
+
+          }
+
+//envia el resultado al front
+      return result;
 }

@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
+
 import { useNavigate } from "react-router-dom";
+
 export const Home= ()=>{
-    //example msg {recipients:[],msg:""}
+
     const nav= useNavigate();
     const [customers,setCustomers]= useState([]);
     const [customersName,setCustomersName]= useState([]);
@@ -11,14 +13,16 @@ export const Home= ()=>{
     const [excCodigo,setExcCodigo]=useState([]);
     const [customerSelected,setCustomerSelected]= useState(undefined);
     const [dateSends,setDateSends]= useState([]);
-    const [sentToday,setSentToday]= useState("");
-    const [mustSendToday,setMustSendToday]= useState("");
     const [msgState,setMsgState]= useState("");
     const [debtors,setDebtors]= useState([]);
     const [updateResult,setUpdateResult]=useState("");
     const [sendMsgResults,setSendMsgResults]= useState({enviados:[],fallidos:[]});
     const [copyName,setCopyName]=useState("Copiar Nombres");
     const [copyArr,setCopyArr]=useState("Copiar Arreglo");
+    const [fuente,setFuente]= useState("excel");
+    const [fileUrl,setFileUrl]= useState("");
+    const [file,setFile]= useState(undefined);
+    const [buttonResult,setButtonResult]= useState("");
     useEffect( ()=>{
         getCustomers();
         getExcCustomers();
@@ -64,6 +68,14 @@ export const Home= ()=>{
         }
     },[excCodigo])
 
+    useEffect(()=>{
+        setButtonResult("");
+        
+    },[file])
+
+    useEffect(()=>{
+        console.log(file);
+    },[file])
     //funciones 
     const getCustomers=async()=>{
         const response= await window.api.getCustomers();
@@ -122,12 +134,51 @@ export const Home= ()=>{
         return result;
     }
 
+    const sendMsgFromExcel= async ()=>{
+        if (!file) {
+            setButtonResult('Debe elegir un archivo');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const arrayBuffer = evt.target.result;
+                const uint8 = new Uint8Array(arrayBuffer);
+                setButtonResult('Enviando...');
+                const res = await window.api.sendExcelBuffer(uint8);
+                console.log('sendExcelBuffer result', res);
+                setButtonResult('Envío finalizado');
+            } catch (err) {
+                console.error(err);
+                setButtonResult('Error al enviar');
+            }
+        };
+        reader.onerror = (err) => {
+            console.error('FileReader error', err);
+            setButtonResult('Error leyendo el archivo');
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
     return(
         <>
             <section style={{display:'flex',alignItems:'center',flexDirection:'column',gap:'5px',width:'99vw',overflowX:'hidden'}}>
                 <span style={{width:'100vw',display:'flex',flexDirection:'row',justifyContent:'flex-end',paddingRight:'90px'}}><button style={{alignSelf:'flex-start',marginLeft:'30px',padding:'8px 30px',cursor:'pointer'}}
                     onClick={()=>{window.api.closeSession()}}
                 >Cerrar Sesion</button></span>
+                <h1>ChatBot</h1>
+                <h3 style={{width:'100vw',paddingLeft:'80px'}}>Elige la fuente de los clientes deudores:</h3>
+                <select style={{width:"93vw",height:'35px',paddingLeft:'10px'}} value={fuente}
+                    onChange={(e)=>{
+                        setFuente(e.target.value);
+                    }}
+                >
+                    <option value={"db"}>Base de datos</option>
+                    <option value={"excel"}>excel</option>
+                </select>
+                {
+                    fuente=="db"?<>
+                                    
                 <h2 style={{width:'100vw',paddingLeft:'80px'}}>NO enviar a:</h2>
                     <div style={{width:'90vw',display:'flex',flexDirection:'row',flexWrap:'wrap',gap:'3px',alignSelf:'flex-start',paddingLeft:'30px'}}>
                     {
@@ -240,7 +291,79 @@ export const Home= ()=>{
                             })
                         }}
                     >Ver Clientes</button>
+                    </>:<>
+                        <h4 style={{width:'100vw',paddingLeft:'80px'}}>Archivo:</h4>
+                        <input type='file' style={{width:'93vw',height:'35px'}} accept=".xlsx" onChange={(e)=>{
+                            const f = e.target.files && e.target.files[0];
+                            setFile(f);
+                            setFileUrl(f?f.name:'');
+                        }} ></input>
+                        <p>{buttonResult}</p>
+                        <button style={{alignSelf:'flex-start',marginLeft:'30px',padding:'8px 30px',cursor:'pointer'}}
+                            onClick={()=>{
+                                if (fileUrl=="") setButtonResult("Debe elegir un archivo")
+                                else {
+                                    sendMsgFromExcel();
+                                }
+                            }}
+                        >
+                            enviar mensaje
+                        </button>
+                    </>
+                }
 
+                {/* Result panel: show enviados and fallidos after any send attempt */}
+                {(sendMsgResults && ( (sendMsgResults.enviados && sendMsgResults.enviados.length>0) || (sendMsgResults.fallidos && sendMsgResults.fallidos.length>0) || sendMsgResults.error )) && (
+                    <section style={{width:'100vw',padding:'20px 80px',boxSizing:'border-box',backgroundColor:'#f7f7f7',marginTop:'10px'}}>
+                        <h3>Resultado del envío</h3>
+                        {sendMsgResults.error && <p style={{color:'red'}}>Error: {String(sendMsgResults.error)}</p>}
+                        <div style={{display:'flex',gap:'20px',flexWrap:'wrap'}}>
+                            <div style={{flex:1,minWidth:'300px'}}>
+                                <h4>Enviados ({sendMsgResults.enviados?sendMsgResults.enviados.length:0})</h4>
+                                <div style={{maxHeight:'200px',overflowY:'auto',background:'white',padding:'8px',borderRadius:4}}>
+                                    {sendMsgResults.enviados && sendMsgResults.enviados.length>0 ? (
+                                        <table style={{width:'100%'}}>
+                                            <thead style={{backgroundColor:'#eee'}}><tr><th>Nombre</th><th>Numero</th><th>Saldo</th></tr></thead>
+                                            <tbody>
+                                            {sendMsgResults.enviados.map((s,i)=>(
+                                                <tr key={i}><td>{s.name}</td><td>{s.number}</td><td>{s.remainingDebt}</td></tr>
+                                            ))}
+                                            </tbody>
+                                        </table>
+                                    ) : <p>No hay enviados</p>}
+                                </div>
+                                <div style={{marginTop:8}}>
+                                    <button style={{padding:'6px 12px',cursor:'pointer'}} onClick={()=>{
+                                        const txt = (sendMsgResults.enviados||[]).map(s=>`${s.name} ${s.number} ${s.remainingDebt||''}`).join('\n');
+                                        navigator.clipboard.writeText(txt);
+                                    }}>Copiar Enviados</button>
+                                </div>
+                            </div>
+
+                            <div style={{flex:1,minWidth:'300px'}}>
+                                <h4>Fallidos ({sendMsgResults.fallidos?sendMsgResults.fallidos.length:0})</h4>
+                                <div style={{maxHeight:'200px',overflowY:'auto',background:'white',padding:'8px',borderRadius:4}}>
+                                    {sendMsgResults.fallidos && sendMsgResults.fallidos.length>0 ? (
+                                        <table style={{width:'100%'}}>
+                                            <thead style={{backgroundColor:'#eee'}}><tr><th>Nombre</th><th>Numero</th><th>Saldo</th></tr></thead>
+                                            <tbody>
+                                            {sendMsgResults.fallidos.map((f,i)=>(
+                                                <tr key={i}><td>{f.name}</td><td>{f.number}</td><td>{f.remainingDebt}</td></tr>
+                                            ))}
+                                            </tbody>
+                                        </table>
+                                    ) : <p>No hay fallidos</p>}
+                                </div>
+                                <div style={{marginTop:8}}>
+                                    <button style={{padding:'6px 12px',cursor:'pointer'}} onClick={()=>{
+                                        const txt = (sendMsgResults.fallidos||[]).map(s=>`${s.name} ${s.number} ${s.remainingDebt||''}`).join('\n');
+                                        navigator.clipboard.writeText(txt);
+                                    }}>Copiar Fallidos</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                )}
             </section>
         </>
     )

@@ -6,7 +6,7 @@ import {Client, LocalAuth} from 'whatsapp-web.js';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode-terminal';
 import path from 'path';
-import { testConnection,getDebtorCustomers, getCustomers,getExcCustomers, updateExcCustomers, getDatesSent } from './backend/controller';
+import { testConnection,getDebtorCustomers, getCustomers,getExcCustomers, updateExcCustomers, getDatesSent,sendMsg, sendMsgFromExcel } from './backend/controller';
 
 //important variables
 let mainWindow;
@@ -120,34 +120,89 @@ ipcMain.handle('getDebtors',async ()=>{
 ipcMain.handle('sendMsg',async()=>{
     const debtors = await getDebtorsToSendMsg();
     const debtorsToSendMsg= debtors.filter(d=>d!=undefined);
-    const result= {enviados:[],fallidos:[]};
 
-     for( let i=0; i < debtorsToSendMsg.length; i++)
-          {
-              const name= debtorsToSendMsg[i].Nombre_Cliente;
-              let tel= debtorsToSendMsg[i].Telefono || ""
-              if (tel[0]!="1")  tel="1"+tel; 
-              const numberCorrected =tel+'@c.us';
-              const totalOfBill= debtorsToSendMsg[i].total_facturas;
-              const payed= debtorsToSendMsg[i].total_abonos;
-              const remainingDebt = debtorsToSendMsg[i].restante;
-            try {
-              const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt}DOP lo mas pronto posible. `; 
-              await client.sendMessage(numberCorrected,msg);
-              await client.sendMessage(numberCorrected,"Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)")
-              result.enviados.push({name:name,number:numberCorrected,remainingDebt:remainingDebt})
-              
-            } catch (error) {
-              result.fallidos.push({name:name,number:numberCorrected,remainingDebt:remainingDebt})
-            }
 
-          }
 
+    const result= await  sendMsg(debtorsToSendMsg);
 //envia el resultado al front
-          mainWindow.webContents.send('onMsgResult',result)
+          mainWindow.webContents.send('onMsgResult',result);
 
 })
 
+ipcMain.handle('sendMsgFromExcel',async (e,fileDir)=>{
+  sendMsgFromExcel(fileDir);
+})
+
+// Handler to receive an ArrayBuffer/Uint8Array from renderer, parse Excel and send messages
+ipcMain.handle('sendExcelBuffer', async (e, uint8arr) => {
+  try {
+    if (!client) {
+      throw new Error('WhatsApp client not initialized');
+    }
+    const buffer = Buffer.from(uint8arr);
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+    const result = { enviados: [], fallidos: [] };
+    // Normalize header keys (remove spaces, toLowerCase, remove accents) to allow flexible column names
+    const normalizeKey = (k) => k.toString().toLowerCase().replace(/\s+/g, '').replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n');
+    for (const row of rows) {
+      // Build a normalized row map
+      const norm = {};
+      for (const key of Object.keys(row)) {
+        const nk = normalizeKey(key);
+        norm[nk] = row[key];
+      }
+
+      // Determine fields using common header names from your Excel:
+      // name: 'nombrecliente'  (from 'Nombre cliente')
+      // phone: 'telefono'
+      // remainingDebt: 'balancependiente' or 'montodeuda' (or compute montodeuda - abono)
+      const name = norm['nombrecliente'] || norm['nombre_representante'] || norm['nombre_cliente'] || norm['nombre'] || norm['name'] || 'Cliente';
+      let tel = String(norm['telefono'] || norm['telefono'] || norm['phone'] || norm['numero'] || norm['number'] || '').trim();
+
+      // Determine remaining debt: prefer 'balancependiente', fallback to 'montodeuda' - 'abono' if available
+      let remainingDebt = '';
+      if (norm['balancependiente'] != null && norm['balancependiente'] !== '') {
+        remainingDebt = norm['balancependiente'];
+      } else if (norm['restante'] != null && norm['restante'] !== '') {
+        remainingDebt = norm['restante'];
+      } else if (norm['montodeuda'] != null) {
+        const monto = parseFloat(String(norm['montodeuda']).toString().replace(/[^0-9.-]+/g, '')) || 0;
+        const abono = parseFloat(String(norm['abono'] || 0).toString().replace(/[^0-9.-]+/g, '')) || 0;
+        remainingDebt = monto - abono;
+      } else if (norm['remainingdebt'] != null) {
+        remainingDebt = norm['remainingdebt'];
+      }
+
+      // Clean phone: remove non-digits
+      tel = tel.replace(/[^0-9]/g, '');
+      if (!tel) {
+        result.fallidos.push({ name, number: tel, remainingDebt });
+        continue;
+      }
+      // Ensure country code / format (your app prepends '1' historically)
+      if (!tel.startsWith('1')) tel = '1' + tel;
+      const numberCorrected = tel + '@c.us';
+      try {
+        const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt} DOP lo mas pronto posible.`;
+        await client.sendMessage(numberCorrected, msg);
+        await client.sendMessage(numberCorrected, "Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)");
+        result.enviados.push({ name, number: numberCorrected, remainingDebt });
+      } catch (err) {
+        console.error('Error sending to', numberCorrected, err);
+        result.fallidos.push({ name, number: numberCorrected, remainingDebt });
+      }
+    }
+    mainWindow.webContents.send('onMsgResult', result);
+    return result;
+  } catch (err) {
+    console.error('Error in sendExcelBuffer handler:', err);
+    mainWindow.webContents.send('onMsgResult', { enviados: [], fallidos: [], error: String(err) });
+    return { res: false, error: String(err) };
+  }
+})
 
 
 
@@ -176,6 +231,7 @@ const getDebtorsToSendMsg= async()=>{
               {
                 isIqual=true;
                 break;
+
               }
             }
             if(isIqual==false) return deptor;
@@ -185,6 +241,7 @@ const getDebtorsToSendMsg= async()=>{
         return (debtorsToSendMsg);
       }
 }
+
 
 
 //whatsappChatBot
