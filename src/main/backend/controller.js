@@ -20,22 +20,38 @@ export const testConnection= async ()=>{
 
 export const getDebtorCustomers = async () => {
     try {
+        // Obtener clientes con restante > 0: si la suma de total menos la suma de Abono es mayor que 0
         const customerIDs = await Venta.findAll({
-            where: { pagado: false },
             attributes: [
                 'Numero_Cliente',
                 'Telefono',
                 'Nombre_Cliente',
-            [fn('SUM', col('total')), 'total_facturas'],
-            // COALESCE SUM(Abono) to 0 so restante computes correctly when Abono is NULL
-            [literal('COALESCE(SUM(Abono), 0)'), 'total_abonos'],
-            [literal('SUM(total) - COALESCE(SUM(Abono), 0)'), 'restante']
+                [fn('SUM', col('total')), 'total_facturas'],
+                // COALESCE SUM(Abono) to 0 so restante computes correctly when Abono is NULL
+                [literal('COALESCE(SUM(Abono), 0)'), 'total_abonos'],
+                [literal('SUM(total) - COALESCE(SUM(Abono), 0)'), 'restante']
             ],
             group: ['Numero_Cliente', 'Telefono', 'Nombre_Cliente'],
+            having: literal('SUM(total) - COALESCE(SUM(Abono), 0) > 0'),
             raw: true
         });
-        //console.log(customerIDs);
-        return { res: true, value: customerIDs, message: '' }
+        // Normalizar Telefono: convertir a string, eliminar no-dígitos y convertir literales 'null' a vacío
+        const normalized = customerIDs.map(c => {
+            const raw = c.Telefono;
+            let tel = '';
+            if (raw != null) {
+                tel = String(raw).trim();
+                const lower = tel.toLowerCase();
+                if (lower === 'null' || lower === 'undefined') {
+                    tel = '';
+                } else {
+                    tel = tel.replace(/[^0-9]/g, '');
+                }
+            }
+            return { ...c, Telefono: tel };
+        });
+
+        return { res: true, value: normalized, message: '' }
     } catch (error) {
         console.log(error)
         return { res: false, value: undefined, message: error }
@@ -139,30 +155,58 @@ export const sendMsgFromExcel= async (excelDir)=>{
 }
 
 
-export const sendMsg= async (debtorsToSendMsg)=>{
-      const result= {enviados:[],fallidos:[]};
+export const sendMsg= async (client, debtorsToSendMsg)=>{
+    const result = { enviados: [], fallidos: [] };
 
-     for( let i=0; i < debtorsToSendMsg.length; i++)
-          {
-              const name= debtorsToSendMsg[i].Nombre_Cliente;
-              let tel= debtorsToSendMsg[i].Telefono || ""
-              if (tel[0]!="1")  tel="1"+tel; 
-              const numberCorrected =tel+'@c.us';
-              const totalOfBill= debtorsToSendMsg[i].total_facturas;
-              const payed= debtorsToSendMsg[i].total_abonos;
-              const remainingDebt = debtorsToSendMsg[i].restante;
-            try {
-              const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt}DOP lo mas pronto posible. `; 
-              await client.sendMessage(numberCorrected,msg);
-              await client.sendMessage(numberCorrected,"Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)")
-              result.enviados.push({name:name,number:numberCorrected,remainingDebt:remainingDebt})
-              
-            } catch (error) {
-              result.fallidos.push({name:name,number:numberCorrected,remainingDebt:remainingDebt})
-            }
+    // Normaliza y valida un teléfono. Retorna { valid: boolean, phone?: string, reason?: string }
+    const normalizePhone = (raw) => {
+        const s = (raw == null ? '' : String(raw)).trim();
+        if (!s) return { valid: false, reason: 'vacío' };
+        const lower = s.toLowerCase();
+        if (lower === 'null' || lower === 'undefined') return { valid: false, reason: 'valor literal null/undefined' };
 
-          }
+        // Extraer sólo dígitos
+        let digits = s.replace(/[^0-9]/g, '');
+        if (!digits) return { valid: false, reason: 'sin dígitos' };
 
-//envia el resultado al front
-      return result;
+        // Regla común: si vienen 10 dígitos (ej: RD local) añadir prefijo '1'
+        if (digits.length === 10) digits = '1' + digits;
+
+        // Aceptamos 11 dígitos que comiencen con '1' (ej: código país + número)
+        if (digits.length === 11 && digits.startsWith('1')) {
+            return { valid: true, phone: digits + '@c.us' };
+        }
+
+        return { valid: false, reason: `longitud inválida: ${digits.length}` };
+    };
+
+    for (let i = 0; i < (debtorsToSendMsg || []).length; i++) {
+        const name = debtorsToSendMsg[i].Nombre_Cliente;
+        const rawTel = debtorsToSendMsg[i].Telefono || '';
+        const totalOfBill = debtorsToSendMsg[i].total_facturas;
+        const payed = debtorsToSendMsg[i].total_abonos;
+        const remainingDebt = debtorsToSendMsg[i].restante;
+
+        const normalized = normalizePhone(rawTel);
+        if (!normalized.valid) {
+            console.warn('Teléfono inválido para', name, rawTel, normalized.reason);
+            result.fallidos.push({ name: name, number: rawTel, remainingDebt: remainingDebt, reason: normalized.reason });
+            continue;
+        }
+
+        const numberCorrected = normalized.phone;
+
+        try {
+            const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt}DOP lo mas pronto posible. `;
+            await client.sendMessage(numberCorrected, msg);
+            await client.sendMessage(numberCorrected, "Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)")
+            result.enviados.push({ name: name, number: numberCorrected, remainingDebt: remainingDebt })
+        } catch (error) {
+            console.error('Error sending to', numberCorrected, error && error.message ? error.message : error);
+            result.fallidos.push({ name: name, number: numberCorrected, remainingDebt: remainingDebt, reason: error && error.message ? error.message : String(error) })
+        }
+    }
+
+    // envia el resultado al front
+    return result;
 }

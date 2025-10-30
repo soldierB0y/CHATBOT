@@ -1,3 +1,6 @@
-2025/10/29-17:56:47.924 6e64 Reusing MANIFEST C:\Users\UserGPC\Documents\projects\chatbot1\.wwebjs_auth\session-miSesion\Default\Local Storage\leveldb/MANIFEST-000001
-2025/10/29-17:56:47.946 6e64 Recovering log #3
-2025/10/29-17:56:47.946 6e64 Reusing old log C:\Users\UserGPC\Documents\projects\chatbot1\.wwebjs_auth\session-miSesion\Default\Local Storage\leveldb/000003.log 
+2025/10/30-09:40:53.055 89c Reusing MANIFEST C:\Users\PC-FERRETERIA 1\Documents\proyectos\chatbot1\.wwebjs_auth\session-miSesion\Default\Local Storage\leveldb/MANIFEST-000001
+2025/10/30-09:40:53.057 89c Recovering log #3
+2025/10/30-09:40:53.058 89c Reusing old log C:\Users\PC-FERRETERIA 1\Documents\proyectos\chatbot1\.wwebjs_auth\session-miSesion\Default\Local Storage\leveldb/000003.log 
+2025/10/30-09:42:53.952 3008 Level-0 table #5: started
+2025/10/30-09:42:53.957 3008 Level-0 table #5: 19022 bytes OK
+2025/10/30-09:42:53.960 3008 Delete type=0 #3

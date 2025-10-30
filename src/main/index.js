@@ -123,7 +123,7 @@ ipcMain.handle('sendMsg',async()=>{
 
 
 
-    const result= await  sendMsg(debtorsToSendMsg);
+  const result= await  sendMsg(client, debtorsToSendMsg);
 //envia el resultado al front
           mainWindow.webContents.send('onMsgResult',result);
 
@@ -282,7 +282,7 @@ const getChromePath = () => {
       '--disable-setuid-sandbox', 
       '--disable-dev-shm-usage'
     ],
-    headless: true
+    headless:false
   }
 })
   
