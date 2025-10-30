@@ -312,7 +312,6 @@ export const Home= ()=>{
                     </>
                 }
 
-                {/* Result panel: show enviados and fallidos after any send attempt */}
                 {(sendMsgResults && ( (sendMsgResults.enviados && sendMsgResults.enviados.length>0) || (sendMsgResults.fallidos && sendMsgResults.fallidos.length>0) || sendMsgResults.error )) && (
                     <section style={{width:'100vw',padding:'20px 80px',boxSizing:'border-box',backgroundColor:'#f7f7f7',marginTop:'10px'}}>
                         <h3>Resultado del envío</h3>
