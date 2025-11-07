@@ -23,6 +23,8 @@ export const Home= ()=>{
     const [fileUrl,setFileUrl]= useState("");
     const [file,setFile]= useState(undefined);
     const [buttonResult,setButtonResult]= useState("");
+    const [isWsLoading, setIsWsLoading] = useState(false);
+    const [wsLoadingMsg, setWsLoadingMsg] = useState('Iniciando WhatsApp...');
     useEffect( ()=>{
         getCustomers();
         getExcCustomers();
@@ -36,6 +38,11 @@ export const Home= ()=>{
             if (data==true) nav('/')
             else alert('error:'+data);
          })
+        // listen for whatsapp web loading state emitted from main
+        window.api.onWsLoading((e, loading) => {
+            setIsWsLoading(Boolean(loading));
+            if (loading) setWsLoadingMsg('Cargando WhatsApp...');
+        });
 
     },[])
     useEffect(()=>{
@@ -362,6 +369,31 @@ export const Home= ()=>{
                             </div>
                         </div>
                     </section>
+                )}
+                {isWsLoading && (
+                    <div style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.45)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 9999,
+                    }}>
+                        <div style={{
+                            background: '#fff',
+                            padding: 24,
+                            borderRadius: 8,
+                            boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
+                            display: 'flex',
+                            gap: 12,
+                            alignItems: 'center'
+                        }}>
+                            <div style={{width:32,height:32,border:'4px solid #ddd',borderTop:'4px solid #3b82f6',borderRadius:'50%',animation:'spin 1s linear infinite'}} />
+                            <div style={{fontSize:16,fontWeight:600}}>{wsLoadingMsg}</div>
+                        </div>
+                        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    </div>
                 )}
             </section>
         </>

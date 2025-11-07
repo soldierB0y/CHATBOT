@@ -23,7 +23,6 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
   createWindow()
-  mainWindow.webContents.openDevTools();
   app.on('activate', function () {
 
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -282,7 +281,7 @@ const getChromePath = () => {
       '--disable-setuid-sandbox', 
       '--disable-dev-shm-usage'
     ],
-    headless:false
+    headless:true
   }
 })
   
@@ -290,12 +289,18 @@ const getChromePath = () => {
       // ✅ TODOS LOS EVENTOS DE ERROR POSIBLES
     client.on('auth_failure', (msg) => {
       console.error('❌ FALLA DE AUTENTICACIÓN:', msg);
-      mainWindow.webContents.send('authError', { error: msg });
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('authError', { error: msg });
+        mainWindow.webContents.send('wsLoading', false);
+      }
     });
 
     client.on('disconnected', (reason) => {
       console.error('🔌 DESCONECTADO:', reason);
-      mainWindow.webContents.send('disconnected', { reason });
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('disconnected', { reason });
+        mainWindow.webContents.send('wsLoading', false);
+      }
     });
 
     // ✅ NUEVOS EVENTOS DE ERROR
@@ -307,9 +312,13 @@ const getChromePath = () => {
 
   client.once('ready',async() => {
 
-    //Luego del Logeo
+    // Luego del Logeo
     console.log('once ready')
+    if (mainWindow && mainWindow.webContents) {
       mainWindow.webContents.send('ready',{ready:true});
+      // Indicar que la carga de la página/cliente WS finalizó
+      mainWindow.webContents.send('wsLoading', false);
+    }
   });
 
 client.on('qr', (qr) => {
@@ -326,8 +335,12 @@ client.on('ready',()=>{
 
 // se encarga de inicializar el navegador de puppeteer, en caso de que fracase envia un mensaje al front
 
+    // Notificar al renderer que se está cargando la página/cliente de WhatsApp
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('wsLoading', true);
     client.initialize().catch(error => {
       console.error('❌ ERROR EN INITIALIZE:', error);
+      // Indicar que la carga terminó con error
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('wsLoading', false);
       // Enviar este error al frontend
       mainWindow.webContents.send('initError', { 
         error: error.message,

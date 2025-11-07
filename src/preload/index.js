@@ -11,6 +11,8 @@ const api = {
   onInitError: (callback) => ipcRenderer.on('initError', callback),
   onMsgResult: (callback) => ipcRenderer.on('onMsgResult', callback),
   onSessionClose:(callback)=>ipcRenderer.on('onSessionClose',callback),
+  // Notifica cuando el cliente/pagina de WhatsApp está cargando (true) o listo (false)
+  onWsLoading: (callback) => ipcRenderer.on('wsLoading', callback),
   closeSession:()=>ipcRenderer.invoke('closeSession'),
   getnewQR:()=>ipcRenderer.invoke('getNewQR'),
   getQR: (callback) => ipcRenderer.on("QR", (_, data) => callback(data)),
