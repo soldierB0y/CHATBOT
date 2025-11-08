@@ -5,17 +5,35 @@ export const QRPage= ()=>{
     const navigator= useNavigate();
     const [QRvalue,setQRValue]= useState('');
     const [isQrLoading, setIsQrLoading] = useState(true);
+    const [qrError, setQrError] = useState(null);
     useEffect(()=>{
+    let timeoutId;
+    const startTimeout = ()=>{
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(()=>{
+        if (!QRvalue) {
+          setQrError('No se pudo generar el código QR. Intente reintentar.');
+          setIsQrLoading(false);
+        }
+      }, 20000*2); // 20s
+    }
+
     window.api.getQR( qr=>{
       setQRValue(qr)
       setIsQrLoading(false);
+      setQrError(null);
+      clearTimeout(timeoutId);
     });
+    startTimeout();
 
     window.api.isReady(data=>{
       console.log(data);
       if(data.ready==true)
         navigator('/home');
     })
+    return ()=>{
+      try{ clearTimeout(timeoutId); }catch(e){}
+    }
   },[])
     return(
         <section style={
@@ -56,6 +74,23 @@ export const QRPage= ()=>{
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
+          {qrError && (
+            <div style={{marginTop:16, textAlign:'center'}}>
+              <p style={{color:'red', fontWeight:600}}>{qrError}</p>
+              <button style={{padding:'8px 16px', cursor:'pointer'}} onClick={async()=>{
+                setQrError(null);
+                setIsQrLoading(true);
+                setQRValue('');
+                try{
+                  await window.api.getnewQR();
+                }catch(e){
+                  console.error('getnewQR error', e);
+                  setQrError('Error al solicitar un nuevo QR');
+                  setIsQrLoading(false);
+                }
+              }}>Reintentar</button>
+            </div>
+          )}
       </section>
     )
 }

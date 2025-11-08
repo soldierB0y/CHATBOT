@@ -25,6 +25,7 @@ export const Home= ()=>{
     const [buttonResult,setButtonResult]= useState("");
     const [isWsLoading, setIsWsLoading] = useState(false);
     const [wsLoadingMsg, setWsLoadingMsg] = useState('Iniciando WhatsApp...');
+    const [messageTemplate, setMessageTemplate] = useState('Estimado {{name}}, le recordamos que tiene un saldo pendiente de {{remainingDebt}} DOP. Por favor contacte para regularizar.');
     useEffect( ()=>{
         getCustomers();
         getExcCustomers();
@@ -122,7 +123,7 @@ export const Home= ()=>{
 
 
     const sendMsg= async()=>{ 
-        const res= await window.api.sendMsg();
+        const res= await window.api.sendMsg(messageTemplate);
         console.log(res);
     }
 
@@ -152,7 +153,7 @@ export const Home= ()=>{
                 const arrayBuffer = evt.target.result;
                 const uint8 = new Uint8Array(arrayBuffer);
                 setButtonResult('Enviando...');
-                const res = await window.api.sendExcelBuffer(uint8);
+                const res = await window.api.sendExcelBuffer(uint8, messageTemplate);
                 console.log('sendExcelBuffer result', res);
                 setButtonResult('Envío finalizado');
             } catch (err) {
@@ -183,6 +184,10 @@ export const Home= ()=>{
                     <option value={"db"}>Base de datos</option>
                     <option value={"excel"}>excel</option>
                 </select>
+                <div style={{width:'93vw',paddingLeft:'10px',paddingTop:8}}>
+                    <label style={{fontWeight:600}}>{'Plantilla de mensaje (usa {{name}} y {{remainingDebt}}): '}</label>
+                    <textarea value={messageTemplate} onChange={(e)=>setMessageTemplate(e.target.value)} style={{width:'93vw',height:90,marginTop:6,padding:8}} />
+                </div>
                 {
                     fuente=="db"?<>
                                     

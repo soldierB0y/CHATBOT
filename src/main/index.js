@@ -116,15 +116,13 @@ ipcMain.handle('getDebtors',async ()=>{
   return debtors;
 })
 
-ipcMain.handle('sendMsg',async()=>{
-    const debtors = await getDebtorsToSendMsg();
-    const debtorsToSendMsg= debtors.filter(d=>d!=undefined);
-
-
-
-  const result= await  sendMsg(client, debtorsToSendMsg);
-//envia el resultado al front
-          mainWindow.webContents.send('onMsgResult',result);
+ipcMain.handle('sendMsg',async (event, template)=>{
+  const debtors = await getDebtorsToSendMsg();
+  const debtorsToSendMsg= debtors.filter(d=>d!=undefined);
+  // Pass optional template to controller.sendMsg
+  const result= await sendMsg(client, debtorsToSendMsg, template);
+  // envia el resultado al front
+  mainWindow.webContents.send('onMsgResult',result);
 
 })
 
@@ -133,7 +131,7 @@ ipcMain.handle('sendMsgFromExcel',async (e,fileDir)=>{
 })
 
 // Handler to receive an ArrayBuffer/Uint8Array from renderer, parse Excel and send messages
-ipcMain.handle('sendExcelBuffer', async (e, uint8arr) => {
+ipcMain.handle('sendExcelBuffer', async (e, uint8arr, template) => {
   try {
     if (!client) {
       throw new Error('WhatsApp client not initialized');
@@ -185,7 +183,21 @@ ipcMain.handle('sendExcelBuffer', async (e, uint8arr) => {
       if (!tel.startsWith('1')) tel = '1' + tel;
       const numberCorrected = tel + '@c.us';
       try {
-        const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt} DOP lo mas pronto posible.`;
+        // prepare variables for templating
+        const vars = {
+          name,
+          remainingDebt,
+          number: numberCorrected,
+          phone: numberCorrected
+        };
+        const applyTemplate = (tpl, vars) => {
+          if (!tpl) return '';
+          return String(tpl).replace(/\{\{\s*(.*?)\s*\}\}/g, (_, key) => {
+            return vars.hasOwnProperty(key) ? String(vars[key]) : ''
+          })
+        };
+
+        const msg = template ? applyTemplate(template, vars) : `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt} DOP lo mas pronto posible.`;
         await client.sendMessage(numberCorrected, msg);
         await client.sendMessage(numberCorrected, "Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)");
         result.enviados.push({ name, number: numberCorrected, remainingDebt });

@@ -155,7 +155,7 @@ export const sendMsgFromExcel= async (excelDir)=>{
 }
 
 
-export const sendMsg= async (client, debtorsToSendMsg)=>{
+export const sendMsg= async (client, debtorsToSendMsg, template)=>{
     const result = { enviados: [], fallidos: [] };
 
     // Normaliza y valida un teléfono. Retorna { valid: boolean, phone?: string, reason?: string }
@@ -197,7 +197,16 @@ export const sendMsg= async (client, debtorsToSendMsg)=>{
         const numberCorrected = normalized.phone;
 
         try {
-            const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt}DOP lo mas pronto posible. `;
+            // apply template if provided
+            const vars = { name, remainingDebt, totalOfBill, payed, number: numberCorrected, phone: numberCorrected };
+            const applyTemplate = (tpl, vars) => {
+                if (!tpl) return '';
+                return String(tpl).replace(/\{\{\s*(.*?)\s*\}\}/g, (_, key) => {
+                    return vars.hasOwnProperty(key) ? String(vars[key]) : '';
+                });
+            };
+
+            const msg = template ? applyTemplate(template, vars) : `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt}DOP lo mas pronto posible. `;
             await client.sendMessage(numberCorrected, msg);
             await client.sendMessage(numberCorrected, "Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)")
             result.enviados.push({ name: name, number: numberCorrected, remainingDebt: remainingDebt })
