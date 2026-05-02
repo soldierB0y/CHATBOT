@@ -20,7 +20,7 @@ const api = {
   isReady: (callback) => ipcRenderer.on("ready", (_, data) => callback(data)),
   getCustomers: ()=>ipcRenderer.invoke('getCustomers'),
   getExcCustomers: ()=> ipcRenderer.invoke('getExcCustomers'),
-  sendMsg: ()=> ipcRenderer.invoke('sendMsg'),
+  sendMsg: (msgTemplate)=> ipcRenderer.invoke('sendMsg', msgTemplate),
   getDebtors:()=> ipcRenderer.invoke('getDebtors'),
   getDateSends:()=>ipcRenderer.invoke('getDateSends'),
   getWs:()=>ipcRenderer.invoke('getWs'),
@@ -28,7 +28,7 @@ const api = {
   sendMsgFromExcel: (fileDir)=> ipcRenderer.invoke('sendMsgFromExcel',fileDir)
   ,
   // recibir un ArrayBuffer/Uint8Array desde renderer y enviarlo al main
-  sendExcelBuffer: (uint8arr) => ipcRenderer.invoke('sendExcelBuffer', uint8arr)
+  sendExcelBuffer: (uint8arr, msgTemplate) => ipcRenderer.invoke('sendExcelBuffer', uint8arr, msgTemplate)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

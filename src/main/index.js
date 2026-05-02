@@ -116,13 +116,13 @@ ipcMain.handle('getDebtors',async ()=>{
   return debtors;
 })
 
-ipcMain.handle('sendMsg',async()=>{
+ipcMain.handle('sendMsg',async(event, msgTemplate)=>{
     const debtors = await getDebtorsToSendMsg();
     const debtorsToSendMsg= debtors.filter(d=>d!=undefined);
 
 
 
-  const result= await  sendMsg(client, debtorsToSendMsg);
+  const result= await  sendMsg(client, debtorsToSendMsg, msgTemplate);
 //envia el resultado al front
           mainWindow.webContents.send('onMsgResult',result);
 
@@ -133,7 +133,7 @@ ipcMain.handle('sendMsgFromExcel',async (e,fileDir)=>{
 })
 
 // Handler to receive an ArrayBuffer/Uint8Array from renderer, parse Excel and send messages
-ipcMain.handle('sendExcelBuffer', async (e, uint8arr) => {
+ipcMain.handle('sendExcelBuffer', async (e, uint8arr, msgTemplate) => {
   try {
     if (!client) {
       throw new Error('WhatsApp client not initialized');
@@ -178,20 +178,23 @@ ipcMain.handle('sendExcelBuffer', async (e, uint8arr) => {
       // Clean phone: remove non-digits
       tel = tel.replace(/[^0-9]/g, '');
       if (!tel) {
-        result.fallidos.push({ name, number: tel, remainingDebt });
+        result.fallidos.push({ name, number: tel, remainingDebt, reason: 'Número vacío o inválido' });
         continue;
       }
       // Ensure country code / format (your app prepends '1' historically)
       if (!tel.startsWith('1')) tel = '1' + tel;
       const numberCorrected = tel + '@c.us';
       try {
-        const msg = `Estimado Cliente ${name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de ${remainingDebt} DOP lo mas pronto posible.`;
+        let msg = msgTemplate || `Estimado Cliente {name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de {remainingDebt} DOP lo mas pronto posible.`;
+        msg = msg.replace(/{name}/g, name)
+                 .replace(/{telephone}/g, tel)
+                 .replace(/{remainingDebt}/g, remainingDebt);
+        
         await client.sendMessage(numberCorrected, msg);
-        await client.sendMessage(numberCorrected, "Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)");
         result.enviados.push({ name, number: numberCorrected, remainingDebt });
       } catch (err) {
         console.error('Error sending to', numberCorrected, err);
-        result.fallidos.push({ name, number: numberCorrected, remainingDebt });
+        result.fallidos.push({ name, number: numberCorrected, remainingDebt, reason: String(err) });
       }
     }
     mainWindow.webContents.send('onMsgResult', result);
@@ -273,7 +276,7 @@ const getChromePath = () => {
 }
 
  client = new Client({
-  authStrategy: new LocalAuth({ clientId: "miSesion" }),
+  authStrategy: new LocalAuth({ clientId: "miSesion", dataPath: app.getPath('userData') }),
   puppeteer: {
     executablePath:getChromePath(),
     args: [
