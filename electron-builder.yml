@@ -17,6 +17,9 @@ asarUnpack:
   - excel/**
 win:
   executableName: chatbot1
+  sign: null
+  certificateFile: null
+  certificatePassword: null
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

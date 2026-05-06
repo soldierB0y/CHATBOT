@@ -6,17 +6,31 @@ export const QRPage= ()=>{
     const [QRvalue,setQRValue]= useState('');
     const [isQrLoading, setIsQrLoading] = useState(true);
     useEffect(()=>{
-    window.api.getQR( qr=>{
-      setQRValue(qr)
-      setIsQrLoading(false);
-    });
+      const checkInitialState = async () => {
+        const currentQr = await window.api.getnewQR();
+        const readyState = await window.api.getReadyState();
+        if (readyState && readyState.ready) {
+          navigator('/home');
+          return;
+        }
+        if (currentQr) {
+          setQRValue(currentQr);
+        }
+        setIsQrLoading(false);
+      };
+      checkInitialState();
 
-    window.api.isReady(data=>{
-      console.log(data);
-      if(data.ready==true)
-        navigator('/home');
-    })
-  },[])
+      window.api.getQR( qr=>{
+        setQRValue(qr)
+        setIsQrLoading(false);
+      });
+
+      window.api.isReady(data=>{
+        console.log(data);
+        if(data.ready==true)
+          navigator('/home');
+      })
+    },[])
     return(
         <section style={
         {

@@ -1,21 +1,87 @@
-import { fn, literal, col, Op } from "sequelize";
+import { fn, literal, col, Op, QueryTypes, Sequelize } from "sequelize";
 import { DB } from "./db"
 import { Customer, Venta } from "./model";
 import * as XLSX from 'xlsx';
 import path from 'path';
 import {app} from 'electron'
 
+const createDynamicDB = ({ host = 'localhost', port = 3306, username = 'root', password = 'root', database } = {}) => {
+    const connectionOptions = {
+        username,
+        password,
+        host,
+        port,
+        dialect: 'mysql',
+        logging: false,
+    };
+    if (database) {
+        connectionOptions.database = database;
+    }
+    return new Sequelize(connectionOptions);
+};
 
-export const testConnection= async ()=>{
+export const testConnection = async (config = {}) => {
     try {
-        await DB.authenticate();
-        console.log("connected")
-        return true;
+        const sequelize = createDynamicDB(config);
+        await sequelize.authenticate();
+        await sequelize.close();
+        return { res: true, message: 'Conexión exitosa' };
     } catch (error) {
         console.log(error);
-        return false;
+        return { res: false, message: error.message || String(error) };
     }
+}
 
+export const getTableRows = async (config = {}, tableName) => {
+    try {
+        if (!tableName) {
+            return { res: false, result: [], message: 'Debe indicar una tabla' };
+        }
+        const sequelize = createDynamicDB(config);
+        const rows = await sequelize.query(`SELECT * FROM \`${tableName}\` LIMIT 500`, {
+            type: QueryTypes.SELECT,
+        });
+        await sequelize.close();
+        return { res: true, result: rows, message: '' };
+    } catch (error) {
+        console.log(error);
+        return { res: false, result: [], message: error.message || String(error) };
+    }
+}
+
+export const parseExcelBuffer = async (buffer) => {
+    try {
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+        const normalizeKey = (k) => k.toString().toLowerCase().replace(/\s+/g, '').replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n');
+        const parsed = rows.map(row => {
+            const norm = {};
+            for (const key of Object.keys(row)) {
+                norm[normalizeKey(key)] = row[key];
+            }
+            const name = norm['nombrecliente'] || norm['nombre_representante'] || norm['nombre_cliente'] || norm['nombre'] || norm['name'] || 'Cliente';
+            const phone = String(norm['telefono'] || norm['phone'] || norm['numero'] || norm['number'] || '').trim();
+            let remainingDebt = '';
+            if (norm['balancependiente'] != null && norm['balancependiente'] !== '') {
+                remainingDebt = norm['balancependiente'];
+            } else if (norm['restante'] != null && norm['restante'] !== '') {
+                remainingDebt = norm['restante'];
+            } else if (norm['montodeuda'] != null) {
+                const monto = parseFloat(String(norm['montodeuda']).replace(/[^0-9.-]+/g, '')) || 0;
+                const abono = parseFloat(String(norm['abono'] || 0).replace(/[^0-9.-]+/g, '')) || 0;
+                remainingDebt = monto - abono;
+            } else if (norm['remainingdebt'] != null) {
+                remainingDebt = norm['remainingdebt'];
+            }
+            return { ...row, name, phone, remainingDebt };
+        });
+        return { res: true, result: parsed, message: '' };
+    } catch (error) {
+        console.log(error);
+        return { res: false, result: [], message: error.message || String(error) };
+    }
 }
 
 export const getDebtorCustomers = async () => {
@@ -27,7 +93,7 @@ export const getDebtorCustomers = async () => {
                 'Telefono',
                 'Nombre_Cliente',
                 [fn('SUM', col('total')), 'total_facturas'],
-                // COALESCE SUM(Abono) to 0 so restante computes correctly when Abono is NULL
+                // COALESCE SUM(Abono) to 0 so restante computes correctamente cuando Abono es NULL
                 [literal('COALESCE(SUM(Abono), 0)'), 'total_abonos'],
                 [literal('SUM(total) - COALESCE(SUM(Abono), 0)'), 'restante']
             ],

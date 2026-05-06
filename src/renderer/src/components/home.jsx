@@ -28,6 +28,17 @@ export const Home = () => {
     const DEFAULT_TEMPLATE = 'Estimado Cliente {name}, le hablamos desde Ferreteria Yenri, para recordarle realizar el pago correspondiente al monto de {remainingDebt} DOP lo mas pronto posible.';
     const [messageTemplate, setMessageTemplate] = useState(() => localStorage.getItem('msgTemplate') || DEFAULT_TEMPLATE);
     const [saveStatus, setSaveStatus] = useState('');
+    const [dbHost, setDbHost] = useState('localhost');
+    const [dbPort, setDbPort] = useState('3306');
+    const [dbUser, setDbUser] = useState('');
+    const [dbPassword, setDbPassword] = useState('');
+    const [dbName, setDbName] = useState('sp_up_sys');
+    const [dbTable, setDbTable] = useState('clientes');
+    const [dbConnected, setDbConnected] = useState(false);
+    const [dbStatus, setDbStatus] = useState('');
+    const [dbStep, setDbStep] = useState('host');
+    const [dbRows, setDbRows] = useState([]);
+    const [excelRows, setExcelRows] = useState([]);
     useEffect(() => {
         getCustomers();
         getExcCustomers();
@@ -121,7 +132,11 @@ export const Home = () => {
 
 
     const sendMsg = async () => {
-        const res = await window.api.sendMsg(messageTemplate);
+        const res = await window.api.sendMsg(
+            messageTemplate,
+            fuente === 'db' ? fullDbConfig : undefined,
+            fuente === 'db' ? dbTable : undefined
+        );
         console.log(res);
     }
 
@@ -165,6 +180,101 @@ export const Home = () => {
         };
         reader.readAsArrayBuffer(file);
     }
+
+    const authDbConfig = {
+        host: dbHost,
+        port: Number(dbPort) || 3306,
+        username: dbUser,
+        password: dbPassword,
+    };
+
+    const fullDbConfig = {
+        ...authDbConfig,
+        database: dbName,
+    };
+
+    const handleHostContinue = () => {
+        if (!dbHost || dbHost.trim() === '') {
+            setDbStatus('Debe ingresar el host antes de continuar');
+            return;
+        }
+        setDbStep('credentials');
+        setDbStatus('Host guardado. Ahora ingrese usuario y contraseña.');
+    };
+
+    const testDbConnection = async () => {
+        if (!dbUser || !dbPassword) {
+            setDbStatus('Ingrese usuario y contraseña antes de conectar');
+            return;
+        }
+        setDbStatus('Probando conexión...');
+        const result = await window.api.testDbConnection(authDbConfig);
+        if (result.res) {
+            setDbConnected(true);
+            setDbStep('dbselect');
+            setDbStatus('Conectado al host. Seleccione base de datos y tabla.');
+        } else {
+            setDbConnected(false);
+            const message = `Error de conexión: ${result.message}`;
+            setDbStatus(message);
+            alert(message);
+        }
+    };
+
+    const loadDbClients = async () => {
+        if (!dbConnected) {
+            setDbStatus('Debe conectarse al host primero');
+            return;
+        }
+        if (!dbName) {
+            setDbStatus('Debe seleccionar la base de datos antes de sincronizar');
+            return;
+        }
+        if (!dbTable) {
+            setDbStatus('Debe seleccionar la tabla antes de sincronizar');
+            return;
+        }
+        const response = await window.api.getTableRows(fullDbConfig, dbTable);
+        if (response.res) {
+            setDebtors(response.result);
+            setDbStatus(`Tabla ${dbTable} cargada: ${response.result.length} filas`);
+        } else {
+            setDebtors([]);
+            setDbStatus(`Error cargando tabla: ${response.message}`);
+        }
+    };
+
+    const viewExcelClients = async () => {
+        if (!file) {
+            setButtonResult('Debe elegir un archivo');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const arrayBuffer = evt.target.result;
+                const uint8 = new Uint8Array(arrayBuffer);
+                const response = await window.api.parseExcelBuffer(uint8);
+                if (response.res) {
+                    setExcelRows(response.result);
+                    setButtonResult(`Clientes cargados: ${response.result.length}`);
+                } else {
+                    setExcelRows([]);
+                    setButtonResult(`Error: ${response.message}`);
+                }
+            } catch (err) {
+                console.error(err);
+                setExcelRows([]);
+                setButtonResult('Error leyendo el archivo');
+            }
+        };
+        reader.onerror = (err) => {
+            console.error('FileReader error', err);
+            setExcelRows([]);
+            setButtonResult('Error leyendo el archivo');
+        };
+        reader.readAsArrayBuffer(file);
+    };
 
     return (
         <>
@@ -231,7 +341,53 @@ export const Home = () => {
                 </div>
                 {
                     fuente == "db" ? <>
-
+                        <div style={{ width: '93vw', display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '30px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <label style={{ fontWeight: 'bold' }}>Host</label>
+                                <input value={dbHost} onChange={(e) => setDbHost(e.target.value)} placeholder="localhost" style={{ height: '32px', padding: '6px' }} />
+                            </div>
+                            {dbStep !== 'host' && (
+                                <>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        <label style={{ fontWeight: 'bold' }}>Usuario</label>
+                                        <input value={dbUser} onChange={(e) => setDbUser(e.target.value)} placeholder="root" style={{ height: '32px', padding: '6px' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        <label style={{ fontWeight: 'bold' }}>Contraseña</label>
+                                        <input type="password" value={dbPassword} onChange={(e) => setDbPassword(e.target.value)} placeholder="********" style={{ height: '32px', padding: '6px' }} />
+                                    </div>
+                                </>
+                            )}
+                            {dbStep === 'host' ? (
+                                <button style={{ alignSelf: 'flex-start', width: '200px', padding: '8px 12px', cursor: 'pointer' }} onClick={handleHostContinue}>Siguiente</button>
+                            ) : dbStep === 'credentials' ? (
+                                <button style={{ alignSelf: 'flex-start', width: '200px', padding: '8px 12px', cursor: 'pointer' }} onClick={testDbConnection}>Conectar</button>
+                            ) : null}
+                            {dbStep === 'dbselect' && (
+                                <>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        <label style={{ fontWeight: 'bold' }}>Base de datos</label>
+                                        <select value={dbName} onChange={(e) => setDbName(e.target.value)} style={{ height: '32px', padding: '6px' }}>
+                                            <option value="sp_up_sys">sp_up_sys</option>
+                                            <option value="clientes_db">clientes_db</option>
+                                            <option value="ventas_db">ventas_db</option>
+                                        </select>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        <label style={{ fontWeight: 'bold' }}>Tabla</label>
+                                        <select value={dbTable} onChange={(e) => setDbTable(e.target.value)} style={{ height: '32px', padding: '6px' }}>
+                                            <option value="clientes">clientes</option>
+                                            <option value="ventas">ventas</option>
+                                            <option value="ventas_articulos">ventas_articulos</option>
+                                        </select>
+                                    </div>
+                                    <button style={{ alignSelf: 'flex-start', width: '200px', padding: '8px 12px', cursor: 'pointer' }} onClick={loadDbClients}>Sincronizar</button>
+                                </>
+                            )}
+                        </div>
+                        <div style={{ width: '93vw', display: 'flex', gap: '10px', alignItems: 'center', paddingLeft: '30px', marginTop: '10px' }}>
+                            <span style={{ color: dbConnected ? '#15803d' : '#b91c1c', fontWeight: '600' }}>{dbStatus}</span>
+                        </div>
                         <h2 style={{ width: '100vw', paddingLeft: '80px' }}>NO enviar a:</h2>
                         <div style={{ width: '90vw', display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '3px', alignSelf: 'flex-start', paddingLeft: '30px' }}>
                             {
@@ -352,18 +508,33 @@ export const Home = () => {
                             const f = e.target.files && e.target.files[0];
                             setFile(f);
                             setFileUrl(f ? f.name : '');
+                            setExcelRows([]);
                         }} ></input>
                         <p>{buttonResult}</p>
-                        <button style={{ alignSelf: 'flex-start', marginLeft: '30px', padding: '8px 30px', cursor: 'pointer' }}
-                            onClick={() => {
-                                if (fileUrl == "") setButtonResult("Debe elegir un archivo")
-                                else {
-                                    sendMsgFromExcel();
-                                }
-                            }}
-                        >
-                            enviar mensaje
-                        </button>
+                        <div style={{ display: 'flex', gap: '10px', paddingLeft: '30px', flexWrap: 'wrap' }}>
+                            <button style={{ alignSelf: 'flex-start', padding: '8px 30px', cursor: 'pointer' }}
+                                onClick={() => {
+                                    if (fileUrl == "") setButtonResult("Debe elegir un archivo")
+                                    else {
+                                        sendMsgFromExcel();
+                                    }
+                                }}
+                            >
+                                enviar mensaje
+                            </button>
+                            <button style={{ alignSelf: 'flex-start', padding: '8px 30px', cursor: 'pointer' }}
+                                onClick={() => { viewExcelClients(); }}
+                            >Ver Clientes</button>
+                        </div>
+                        {excelRows.length > 0 && (
+                            <div style={{ width: '90vw', maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignSelf: 'flex-start', paddingLeft: '30px', overflowX: 'hidden', gap: '4px' }}>
+                                {excelRows.map((row, index) => (
+                                    <span key={index} style={{ width: '100%', backgroundColor: index % 2 ? '#f6f6f6' : '#fff', padding: '6px 8px', borderRadius: '4px', wordBreak: 'break-word' }}>
+                                        {row.name || row.Nombre_Cliente || row.nombre_cliente || row.Nombre_Representante || JSON.stringify(row)} - {row.remainingDebt ?? ''}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </>
                 }
 

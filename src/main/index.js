@@ -6,13 +6,14 @@ import {Client, LocalAuth} from 'whatsapp-web.js';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode-terminal';
 import path from 'path';
-import { testConnection,getDebtorCustomers, getCustomers,getExcCustomers, updateExcCustomers, getDatesSent,sendMsg, sendMsgFromExcel } from './backend/controller';
+import { testConnection, getDebtorCustomers, getCustomers, getExcCustomers, updateExcCustomers, getDatesSent, sendMsg, sendMsgFromExcel, getTableRows, parseExcelBuffer } from './backend/controller';
 
 //important variables
 let mainWindow;
-let excelFilePath= app.isPackaged?path.join(process.resourcesPath, 'app.asar.unpacked', 'excel', 'debtorsExceptions.xlsx'):path.join(process.cwd(),'excel','debtorsExceptions.xlsx');
-let newQr; 
-let client
+let excelFilePath = app.isPackaged ? path.join(process.resourcesPath, 'app.asar.unpacked', 'excel', 'debtorsExceptions.xlsx') : path.join(process.cwd(), 'excel', 'debtorsExceptions.xlsx');
+let newQr;
+let client;
+let isClientReady = false;
 
 //app
 app.whenReady().then(() => {
@@ -84,6 +85,9 @@ app.on('window-all-closed', () => {
 ipcMain.handle('getNewQR', async (e)=>{
   return newQr;
 })
+ipcMain.handle('getReadyState', async () => {
+  return { ready: isClientReady };
+});
 
 ipcMain.handle('closeSession',async ()=>{
       client.logout()
@@ -103,32 +107,43 @@ ipcMain.handle('updateExcCustomers', async (event, excC) => {
 ipcMain.handle('getCustomers', async (e) => {
   return await getCustomers();
 });
-/*
-ipcMain.handle('sendMsg', async (e) => {
-  return await sendMsg();
-});*/
+ipcMain.handle('testDbConnection', async (e, config) => {
+  return await testConnection(config);
+});
+ipcMain.handle('getTableRows', async (e, config, tableName) => {
+  return await getTableRows(config, tableName);
+});
 ipcMain.handle('getDateSends', async (e) => {
   return await getDatesSent();
 });
 
-ipcMain.handle('getDebtors',async ()=>{
-  const debtors= await getDebtorsToSendMsg();
+ipcMain.handle('getDebtors', async (e, config, tableName) => {
+  if (config && tableName) {
+    const result = await getTableRows(config, tableName);
+    return result.res ? result.result : [];
+  }
+  const debtors = await getDebtorsToSendMsg();
   return debtors;
 })
 
-ipcMain.handle('sendMsg',async(event, msgTemplate)=>{
-    const debtors = await getDebtorsToSendMsg();
-    const debtorsToSendMsg= debtors.filter(d=>d!=undefined);
-
-
-
-  const result= await  sendMsg(client, debtorsToSendMsg, msgTemplate);
-//envia el resultado al front
-          mainWindow.webContents.send('onMsgResult',result);
-
+ipcMain.handle('sendMsg', async (event, msgTemplate, dbConfig, dbTable) => {
+    const debtors = dbConfig && dbTable ? (await getTableRows(dbConfig, dbTable)).result : await getDebtorsToSendMsg();
+    const debtorsToSendMsg = (debtors || []).filter(d => d != undefined);
+    const result = await sendMsg(client, debtorsToSendMsg, msgTemplate);
+    mainWindow.webContents.send('onMsgResult', result);
 })
 
-ipcMain.handle('sendMsgFromExcel',async (e,fileDir)=>{
+ipcMain.handle('parseExcelBuffer', async (e, uint8arr) => {
+  try {
+    const buffer = Buffer.from(uint8arr);
+    return await parseExcelBuffer(buffer);
+  } catch (err) {
+    console.error('Error parsing excel buffer:', err);
+    return { res: false, result: [], message: String(err) };
+  }
+});
+
+ipcMain.handle('sendMsgFromExcel', async (e, fileDir) => {
   sendMsgFromExcel(fileDir);
 })
 
@@ -284,7 +299,7 @@ const getChromePath = () => {
       '--disable-setuid-sandbox', 
       '--disable-dev-shm-usage'
     ],
-    headless:true
+    headless:false
   }
 })
   
@@ -298,6 +313,13 @@ const getChromePath = () => {
       }
     });
 
+    client.on('authenticated', () => {
+      console.log('✅ Sesión autenticada');
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('wsLoading', true);
+      }
+    });
+
     client.on('disconnected', (reason) => {
       console.error('🔌 DESCONECTADO:', reason);
       if (mainWindow && mainWindow.webContents) {
@@ -306,30 +328,34 @@ const getChromePath = () => {
       }
     });
 
-    // ✅ NUEVOS EVENTOS DE ERROR
     client.on('change_state', (state) => {
       if (state === 'UNPAIRED' || state === 'UNLAUNCHED') {
         console.error('❌ ESTADO CRÍTICO:', state);
-        mainWindow.webContents.send('changeState', { state });
-      }})
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send('changeState', { state });
+        }
+      }
+    });
 
   client.once('ready',async() => {
 
     // Luego del Logeo
     console.log('once ready')
+    isClientReady = true;
     if (mainWindow && mainWindow.webContents) {
       mainWindow.webContents.send('ready',{ready:true});
-      // Indicar que la carga de la página/cliente WS finalizó
       mainWindow.webContents.send('wsLoading', false);
     }
   });
 
 client.on('qr', (qr) => {
-  newQr= qr;
-    QRCode.generate(qr, { small: true },(x)=>{
-        console.log(x);
-    });
+  newQr = qr;
+  if (mainWindow && mainWindow.webContents) {
     sendQRFront(qr);
+  }
+  QRCode.generate(qr, { small: true }, (x) => {
+    console.log(x);
+  });
 });
 
 client.on('ready',()=>{

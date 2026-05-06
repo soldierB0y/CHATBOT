@@ -15,18 +15,21 @@ const api = {
   onWsLoading: (callback) => ipcRenderer.on('wsLoading', callback),
   closeSession:()=>ipcRenderer.invoke('closeSession'),
   getnewQR:()=>ipcRenderer.invoke('getNewQR'),
+  getReadyState:()=>ipcRenderer.invoke('getReadyState'),
   getQR: (callback) => ipcRenderer.on("QR", (_, data) => callback(data)),
   isDev: (callback) => ipcRenderer.on("isDev", (_, data) => callback(data)),
   isReady: (callback) => ipcRenderer.on("ready", (_, data) => callback(data)),
   getCustomers: ()=>ipcRenderer.invoke('getCustomers'),
   getExcCustomers: ()=> ipcRenderer.invoke('getExcCustomers'),
-  sendMsg: (msgTemplate)=> ipcRenderer.invoke('sendMsg', msgTemplate),
-  getDebtors:()=> ipcRenderer.invoke('getDebtors'),
+  sendMsg: (msgTemplate, dbConfig, dbTable)=> ipcRenderer.invoke('sendMsg', msgTemplate, dbConfig, dbTable),
+  getDebtors:(dbConfig, dbTable)=> ipcRenderer.invoke('getDebtors', dbConfig, dbTable),
   getDateSends:()=>ipcRenderer.invoke('getDateSends'),
+  testDbConnection:(dbConfig)=> ipcRenderer.invoke('testDbConnection', dbConfig),
+  getTableRows:(dbConfig, tableName)=> ipcRenderer.invoke('getTableRows', dbConfig, tableName),
+  parseExcelBuffer:(uint8arr)=> ipcRenderer.invoke('parseExcelBuffer', uint8arr),
   getWs:()=>ipcRenderer.invoke('getWs'),
   updateExcCustomers:(excC)=> ipcRenderer.invoke('updateExcCustomers',excC),
-  sendMsgFromExcel: (fileDir)=> ipcRenderer.invoke('sendMsgFromExcel',fileDir)
-  ,
+  sendMsgFromExcel: (fileDir)=> ipcRenderer.invoke('sendMsgFromExcel',fileDir),
   // recibir un ArrayBuffer/Uint8Array desde renderer y enviarlo al main
   sendExcelBuffer: (uint8arr, msgTemplate) => ipcRenderer.invoke('sendExcelBuffer', uint8arr, msgTemplate)
 }
