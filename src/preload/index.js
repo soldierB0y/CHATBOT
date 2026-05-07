@@ -10,6 +10,8 @@ const api = {
   onChangeState: (callback) => ipcRenderer.on('changeState', callback),
   onInitError: (callback) => ipcRenderer.on('initError', callback),
   onMsgResult: (callback) => ipcRenderer.on('onMsgResult', callback),
+  onMsgStatus: (callback) => ipcRenderer.on('msgStatus', callback),
+  onMsgProgress: (callback) => ipcRenderer.on('msgProgress', callback),
   onSessionClose:(callback)=>ipcRenderer.on('onSessionClose',callback),
   // Notifica cuando el cliente/pagina de WhatsApp está cargando (true) o listo (false)
   onWsLoading: (callback) => ipcRenderer.on('wsLoading', callback),

@@ -1,4 +1,4 @@
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -14,6 +14,7 @@ export const Home = () => {
     const [customerSelected, setCustomerSelected] = useState(undefined);
     const [dateSends, setDateSends] = useState([]);
     const [msgState, setMsgState] = useState("");
+    const [sendStatus, setSendStatus] = useState("");
     const [debtors, setDebtors] = useState([]);
     const [updateResult, setUpdateResult] = useState("");
     const [sendMsgResults, setSendMsgResults] = useState({ enviados: [], fallidos: [] });
@@ -39,6 +40,7 @@ export const Home = () => {
     const [dbStep, setDbStep] = useState('host');
     const [dbRows, setDbRows] = useState([]);
     const [excelRows, setExcelRows] = useState([]);
+    const [progress, setProgress] = useState({ current: 0, total: 0 });
     useEffect(() => {
         getCustomers();
         getExcCustomers();
@@ -46,16 +48,34 @@ export const Home = () => {
         window.api.onMsgResult((e, data) => {
             setMsgState("realizado!");
             setSendMsgResults(data);
+            if (data.error) {
+                setSendStatus(`Error de envío: ${data.error}`);
+            } else {
+                setSendStatus(`Envío completado: ${data.enviados?.length || 0} enviados, ${data.fallidos?.length || 0} fallidos`);
+            }
+        });
+        window.api.onMsgStatus((e, data) => {
+            if (data && data.status) {
+                setSendStatus(data.status);
+            }
+        });
+        window.api.onMsgProgress((e, data) => {
+            if (data) {
+                setProgress({ current: data.current, total: data.total });
+                setSendStatus(`${data.status} (${data.current}/${data.total})`);
+            }
         });
         window.api.onSessionClose((e, data) => {
-
             if (data == true) nav('/')
             else alert('error:' + data);
         })
         // listen for whatsapp web loading state emitted from main
         window.api.onWsLoading((e, loading) => {
-            setIsWsLoading(Boolean(loading));
-            if (loading) setWsLoadingMsg('Cargando WhatsApp...');
+            const isLoading = typeof loading === 'object' ? loading.loading : Boolean(loading);
+            setIsWsLoading(isLoading);
+            if (isLoading) {
+                setWsLoadingMsg(typeof loading === 'object' && loading.message ? loading.message : 'Cargando WhatsApp...');
+            }
         });
 
     }, [])
@@ -132,6 +152,8 @@ export const Home = () => {
 
 
     const sendMsg = async () => {
+        setSendStatus('Iniciando envío de mensajes...');
+        setProgress({ current: 0, total: 0 });
         const res = await window.api.sendMsg(
             messageTemplate,
             fuente === 'db' ? fullDbConfig : undefined,
@@ -166,12 +188,19 @@ export const Home = () => {
                 const arrayBuffer = evt.target.result;
                 const uint8 = new Uint8Array(arrayBuffer);
                 setButtonResult('Enviando...');
+                setSendStatus('Enviando mensajes desde Excel...');
+                setProgress({ current: 0, total: 0 });
                 const res = await window.api.sendExcelBuffer(uint8, messageTemplate);
                 console.log('sendExcelBuffer result', res);
-                setButtonResult('Envío finalizado');
+                if (res && res.enviados) {
+                    setButtonResult('Envío finalizado');
+                } else {
+                    setButtonResult('Envío finalizado');
+                }
             } catch (err) {
                 console.error(err);
                 setButtonResult('Error al enviar');
+                setSendStatus(`Error al enviar desde Excel: ${err?.message || err}`);
             }
         };
         reader.onerror = (err) => {
@@ -475,7 +504,13 @@ export const Home = () => {
                         <button style={{ alignSelf: 'flex-start', marginLeft: '30px', padding: '8px 30px', cursor: 'pointer' }}
                             onClick={() => { sendMsg() }}
                         >Enviar Mensajes</button>
-                        <p>{msgState}</p>
+                        <p style={{ fontWeight: 600, color: '#1d4ed8' }}>{sendStatus || msgState}</p>
+                        {progress.total > 0 && (
+                            <div style={{ width: '90vw', marginLeft: '30px', marginTop: '10px' }}>
+                                <progress value={progress.current} max={progress.total} style={{ width: '100%', height: '20px' }} />
+                                <p style={{ textAlign: 'center', marginTop: '5px' }}>Progreso: {progress.current} / {progress.total}</p>
+                            </div>
+                        )}
 
                         <h3 style={{ width: '100vw', paddingLeft: '80px' }}>Clientes que deben pagar:</h3>
                         {

@@ -5,6 +5,8 @@ export const QRPage= ()=>{
     const navigator= useNavigate();
     const [QRvalue,setQRValue]= useState('');
     const [isQrLoading, setIsQrLoading] = useState(true);
+    const [qrStatus, setQrStatus] = useState('Generando código QR...');
+    const [qrError, setQrError] = useState('');
     useEffect(()=>{
       const checkInitialState = async () => {
         const currentQr = await window.api.getnewQR();
@@ -15,13 +17,39 @@ export const QRPage= ()=>{
         }
         if (currentQr) {
           setQRValue(currentQr);
+          setQrStatus('QR listo. Escanéalo con WhatsApp.');
         }
         setIsQrLoading(false);
       };
       checkInitialState();
 
-      window.api.getQR( qr=>{
+      window.api.getQR(qr => {
         setQRValue(qr)
+        setQrStatus('QR listo. Escanéalo con WhatsApp.');
+        setIsQrLoading(false);
+      });
+
+      window.api.onWsLoading((e, loading) => {
+        const current = typeof loading === 'object' ? loading : { loading: Boolean(loading), message: loading === true ? 'Cargando WhatsApp...' : '' };
+        setIsQrLoading(current.loading);
+        if (current.message) setQrStatus(current.message);
+      });
+
+      window.api.onAuthError((e, error) => {
+        const message = error?.error || String(error);
+        setQrError(`Error de autenticación: ${message}`);
+        setIsQrLoading(false);
+      });
+
+      window.api.onInitError((e, error) => {
+        const message = error?.error || String(error);
+        setQrError(`Error cargando sesión: ${message}`);
+        setIsQrLoading(false);
+      });
+
+      window.api.onDisconnected((e, data) => {
+        const message = data?.reason || 'Desconectado';
+        setQrError(`Sesión desconectada: ${message}`);
         setIsQrLoading(false);
       });
 
@@ -45,6 +73,7 @@ export const QRPage= ()=>{
       }>
         <p style={{fontWeight:700}}>Escanee este codigo para iniciar sesion:</p>
         {QRvalue!=''?<QRCodeCanvas value={QRvalue} size={500}/>:<div style={{width:500,height:500,display:'flex',alignItems:'center',justifyContent:'center',background:'#fff'}}> </div>}
+        <p style={{ marginTop: 20, fontWeight: 600, color: qrError ? '#dc2626' : '#0f172a' }}>{qrError || qrStatus}</p>
         {isQrLoading && (
           <div style={{
             position: 'fixed',

@@ -221,7 +221,7 @@ export const sendMsgFromExcel= async (excelDir)=>{
 }
 
 
-export const sendMsg= async (client, debtorsToSendMsg, msgTemplate)=>{
+export const sendMsg= async (client, debtorsToSendMsg, msgTemplate, onProgress)=>{
     const result = { enviados: [], fallidos: [] };
 
     // Normaliza y valida un teléfono. Retorna { valid: boolean, phone?: string, reason?: string }
@@ -257,6 +257,15 @@ export const sendMsg= async (client, debtorsToSendMsg, msgTemplate)=>{
         if (!normalized.valid) {
             console.warn('Teléfono inválido para', name, rawTel, normalized.reason);
             result.fallidos.push({ name: name, number: rawTel, remainingDebt: remainingDebt, reason: normalized.reason });
+            if (typeof onProgress === 'function') {
+                onProgress({
+                    current: i + 1,
+                    total: debtorsToSendMsg.length,
+                    name,
+                    number: rawTel,
+                    status: `Número inválido para ${name}: ${normalized.reason}`
+                });
+            }
             continue;
         }
 
@@ -268,12 +277,31 @@ export const sendMsg= async (client, debtorsToSendMsg, msgTemplate)=>{
                      .replace(/{telephone}/g, rawTel)
                      .replace(/{remainingDebt}/g, remainingDebt);
 
+            if (typeof onProgress === 'function') {
+                onProgress({
+                    current: i + 1,
+                    total: debtorsToSendMsg.length,
+                    name,
+                    number: numberCorrected,
+                    status: `Enviando mensaje a ${name}`
+                });
+            }
+
             await client.sendMessage(numberCorrected, msg);
             await client.sendMessage(numberCorrected, "Numeros de cuenta para transferencias: Banco popular ==> 745959635 (Richar Batista), Banreservas==> 1630452690 (Richar Batista), Banco BHD==> 13686600032 (Richar Batista)")
             result.enviados.push({ name: name, number: numberCorrected, remainingDebt: remainingDebt })
         } catch (error) {
             console.error('Error sending to', numberCorrected, error && error.message ? error.message : error);
             result.fallidos.push({ name: name, number: numberCorrected, remainingDebt: remainingDebt, reason: error && error.message ? error.message : String(error) })
+            if (typeof onProgress === 'function') {
+                onProgress({
+                    current: i + 1,
+                    total: debtorsToSendMsg.length,
+                    name,
+                    number: numberCorrected,
+                    status: `Error enviando a ${name}: ${error && error.message ? error.message : String(error)}`
+                });
+            }
         }
     }
 

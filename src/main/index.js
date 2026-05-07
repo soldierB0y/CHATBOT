@@ -129,8 +129,18 @@ ipcMain.handle('getDebtors', async (e, config, tableName) => {
 ipcMain.handle('sendMsg', async (event, msgTemplate, dbConfig, dbTable) => {
     const debtors = dbConfig && dbTable ? (await getTableRows(dbConfig, dbTable)).result : await getDebtorsToSendMsg();
     const debtorsToSendMsg = (debtors || []).filter(d => d != undefined);
-    const result = await sendMsg(client, debtorsToSendMsg, msgTemplate);
-    mainWindow.webContents.send('onMsgResult', result);
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('msgStatus', { status: 'Preparando envío de mensajes...', total: debtorsToSendMsg.length });
+    }
+    const result = await sendMsg(client, debtorsToSendMsg, msgTemplate, (progress) => {
+      if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('msgProgress', progress);
+      }
+    });
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('onMsgResult', result);
+    }
+    return result;
 })
 
 ipcMain.handle('parseExcelBuffer', async (e, uint8arr) => {
@@ -159,9 +169,14 @@ ipcMain.handle('sendExcelBuffer', async (e, uint8arr, msgTemplate) => {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet);
     const result = { enviados: [], fallidos: [] };
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('msgStatus', { status: 'Preparando envío desde Excel...', total: rows.length });
+    }
     // Normalize header keys (remove spaces, toLowerCase, remove accents) to allow flexible column names
     const normalizeKey = (k) => k.toString().toLowerCase().replace(/\s+/g, '').replace(/á/g,'a').replace(/é/g,'e').replace(/í/g,'i').replace(/ó/g,'o').replace(/ú/g,'u').replace(/ñ/g,'n');
+    let excelIndex = 0;
     for (const row of rows) {
+      excelIndex += 1;
       // Build a normalized row map
       const norm = {};
       for (const key of Object.keys(row)) {
@@ -194,6 +209,15 @@ ipcMain.handle('sendExcelBuffer', async (e, uint8arr, msgTemplate) => {
       tel = tel.replace(/[^0-9]/g, '');
       if (!tel) {
         result.fallidos.push({ name, number: tel, remainingDebt, reason: 'Número vacío o inválido' });
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send('msgProgress', {
+            current: excelIndex,
+            total: rows.length,
+            name,
+            number: tel,
+            status: `Número inválido en fila ${excelIndex}`
+          });
+        }
         continue;
       }
       // Ensure country code / format (your app prepends '1' historically)
@@ -204,12 +228,29 @@ ipcMain.handle('sendExcelBuffer', async (e, uint8arr, msgTemplate) => {
         msg = msg.replace(/{name}/g, name)
                  .replace(/{telephone}/g, tel)
                  .replace(/{remainingDebt}/g, remainingDebt);
-        
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send('msgProgress', {
+            current: excelIndex,
+            total: rows.length,
+            name,
+            number: numberCorrected,
+            status: `Enviando mensaje a ${name} (${excelIndex}/${rows.length})`
+          });
+        }
         await client.sendMessage(numberCorrected, msg);
         result.enviados.push({ name, number: numberCorrected, remainingDebt });
       } catch (err) {
         console.error('Error sending to', numberCorrected, err);
         result.fallidos.push({ name, number: numberCorrected, remainingDebt, reason: String(err) });
+        if (mainWindow && mainWindow.webContents) {
+          mainWindow.webContents.send('msgProgress', {
+            current: excelIndex,
+            total: rows.length,
+            name,
+            number: numberCorrected,
+            status: `Error enviando a ${name}: ${String(err)}`
+          });
+        }
       }
     }
     mainWindow.webContents.send('onMsgResult', result);
@@ -309,14 +350,14 @@ const getChromePath = () => {
       console.error('❌ FALLA DE AUTENTICACIÓN:', msg);
       if (mainWindow && mainWindow.webContents) {
         mainWindow.webContents.send('authError', { error: msg });
-        mainWindow.webContents.send('wsLoading', false);
+        mainWindow.webContents.send('wsLoading', { loading: false, message: `Falla de autenticación: ${msg}` });
       }
     });
 
     client.on('authenticated', () => {
       console.log('✅ Sesión autenticada');
       if (mainWindow && mainWindow.webContents) {
-        mainWindow.webContents.send('wsLoading', true);
+        mainWindow.webContents.send('wsLoading', { loading: true, message: 'Sesión autenticada, esperando carga de WhatsApp...' });
       }
     });
 
@@ -324,7 +365,7 @@ const getChromePath = () => {
       console.error('🔌 DESCONECTADO:', reason);
       if (mainWindow && mainWindow.webContents) {
         mainWindow.webContents.send('disconnected', { reason });
-        mainWindow.webContents.send('wsLoading', false);
+        mainWindow.webContents.send('wsLoading', { loading: false, message: `Sesión desconectada: ${reason}` });
       }
     });
 
@@ -344,7 +385,7 @@ const getChromePath = () => {
     isClientReady = true;
     if (mainWindow && mainWindow.webContents) {
       mainWindow.webContents.send('ready',{ready:true});
-      mainWindow.webContents.send('wsLoading', false);
+      mainWindow.webContents.send('wsLoading', { loading: false, message: 'WhatsApp listo' });
     }
   });
 
@@ -352,6 +393,7 @@ client.on('qr', (qr) => {
   newQr = qr;
   if (mainWindow && mainWindow.webContents) {
     sendQRFront(qr);
+    mainWindow.webContents.send('wsLoading', { loading: true, message: 'QR generado. Escanéalo con WhatsApp para continuar.' });
   }
   QRCode.generate(qr, { small: true }, (x) => {
     console.log(x);
@@ -365,11 +407,11 @@ client.on('ready',()=>{
 // se encarga de inicializar el navegador de puppeteer, en caso de que fracase envia un mensaje al front
 
     // Notificar al renderer que se está cargando la página/cliente de WhatsApp
-    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('wsLoading', true);
+    if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('wsLoading', { loading: true, message: 'Inicializando sesión de WhatsApp...' });
     client.initialize().catch(error => {
       console.error('❌ ERROR EN INITIALIZE:', error);
       // Indicar que la carga terminó con error
-      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('wsLoading', false);
+      if (mainWindow && mainWindow.webContents) mainWindow.webContents.send('wsLoading', { loading: false, message: `Error inicializando WhatsApp: ${error.message}` });
       // Enviar este error al frontend
       mainWindow.webContents.send('initError', { 
         error: error.message,
