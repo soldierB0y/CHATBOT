@@ -393,7 +393,7 @@ client.on('qr', (qr) => {
   newQr = qr;
   if (mainWindow && mainWindow.webContents) {
     sendQRFront(qr);
-    mainWindow.webContents.send('wsLoading', { loading: true, message: 'QR generado. Escanéalo con WhatsApp para continuar.' });
+    mainWindow.webContents.send('wsLoading', { loading: false, message: 'QR generado. Escanéalo con WhatsApp para continuar.' });
   }
   QRCode.generate(qr, { small: true }, (x) => {
     console.log(x);
