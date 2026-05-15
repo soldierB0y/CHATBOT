@@ -1,0 +1,352 @@
+import { fn, literal, col, Op, QueryTypes, Sequelize } from "sequelize";
+import { DB } from "./db";
+import { Customer, Venta } from "./model";
+import * as XLSX from "xlsx";
+import path from "path";
+import { app } from "electron";
+
+const createDynamicDB = ({
+  host = "localhost",
+  port = 3306,
+  username = "root",
+  password = "root",
+  database,
+} = {}) => {
+  const connectionOptions = {
+    username,
+    password,
+    host,
+    port,
+    dialect: "mysql",
+    logging: false,
+  };
+  if (database) {
+    connectionOptions.database = database;
+  }
+  return new Sequelize(connectionOptions);
+};
+
+export const testConnection = async (config = {}) => {
+  try {
+    const sequelize = createDynamicDB(config);
+    await sequelize.authenticate();
+    await sequelize.close();
+    return { res: true, message: "Conexión exitosa" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, message: error.message || String(error) };
+  }
+};
+
+export const getTableRows = async (config = {}, tableName) => {
+  try {
+    if (!tableName) {
+      return { res: false, result: [], message: "Debe indicar una tabla" };
+    }
+    const sequelize = createDynamicDB(config);
+    const rows = await sequelize.query(`SELECT * FROM \`${tableName}\``, {
+      type: QueryTypes.SELECT,
+    });
+    await sequelize.close();
+    return { res: true, result: rows, message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, result: [], message: error.message || String(error) };
+  }
+};
+
+export const parseExcelBuffer = async (buffer) => {
+  try {
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+    const normalizeKey = (k) =>
+      k
+        .toString()
+        .toLowerCase()
+        .replace(/\s+/g, "")
+        .replace(/á/g, "a")
+        .replace(/é/g, "e")
+        .replace(/í/g, "i")
+        .replace(/ó/g, "o")
+        .replace(/ú/g, "u")
+        .replace(/ñ/g, "n");
+    const parsed = rows.map((row) => {
+      const norm = {};
+      for (const key of Object.keys(row)) {
+        norm[normalizeKey(key)] = row[key];
+      }
+      const name =
+        norm["nombrecliente"] ||
+        norm["nombre_representante"] ||
+        norm["nombre_cliente"] ||
+        norm["nombre"] ||
+        norm["name"] ||
+        "Cliente";
+      const phone = String(
+        norm["telefono"] ||
+          norm["phone"] ||
+          norm["numero"] ||
+          norm["number"] ||
+          "",
+      ).trim();
+      let remainingDebt = "";
+      if (norm["balancependiente"] != null && norm["balancependiente"] !== "") {
+        remainingDebt = norm["balancependiente"];
+      } else if (norm["restante"] != null && norm["restante"] !== "") {
+        remainingDebt = norm["restante"];
+      } else if (norm["montodeuda"] != null) {
+        const monto =
+          parseFloat(String(norm["montodeuda"]).replace(/[^0-9.-]+/g, "")) || 0;
+        const abono =
+          parseFloat(String(norm["abono"] || 0).replace(/[^0-9.-]+/g, "")) || 0;
+        remainingDebt = monto - abono;
+      } else if (norm["remainingdebt"] != null) {
+        remainingDebt = norm["remainingdebt"];
+      }
+      return { ...row, name, phone, remainingDebt };
+    });
+    return { res: true, result: parsed, message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, result: [], message: error.message || String(error) };
+  }
+};
+
+export const getDebtorCustomers = async () => {
+  try {
+    // Obtener clientes con restante > 0: si la suma de total menos la suma de Abono es mayor que 0
+    const customerIDs = await Venta.findAll({
+      attributes: [
+        "Numero_Cliente",
+        "Telefono",
+        "Nombre_Cliente",
+        [fn("SUM", col("total")), "total_facturas"],
+        // COALESCE SUM(Abono) to 0 so restante computes correctamente cuando Abono es NULL
+        [literal("COALESCE(SUM(Abono), 0)"), "total_abonos"],
+        [literal("SUM(total) - COALESCE(SUM(Abono), 0)"), "restante"],
+      ],
+      group: ["Numero_Cliente", "Telefono", "Nombre_Cliente"],
+      having: literal("SUM(total) - COALESCE(SUM(Abono), 0) > 0"),
+      raw: true,
+    });
+    // Normalizar Telefono: convertir a string, eliminar no-dígitos y convertir literales 'null' a vacío
+    const normalized = customerIDs.map((c) => {
+      const raw = c.Telefono;
+      let tel = "";
+      if (raw != null) {
+        tel = String(raw).trim();
+        const lower = tel.toLowerCase();
+        if (lower === "null" || lower === "undefined") {
+          tel = "";
+        } else {
+          tel = tel.replace(/[^0-9]/g, "");
+        }
+      }
+      return { ...c, Telefono: tel };
+    });
+
+    return { res: true, value: normalized, message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, value: undefined, message: error };
+  }
+};
+
+//excel
+//C:\Users\UserGPC\Documents\projects\WBot ELECTRON\cobrador\dist\win-unpacked\resources\app.asar.unpacked\excel
+let excelFilePath;
+if (app.isPackaged) {
+  excelFilePath = path.join(
+    process.resourcesPath,
+    "app.asar.unpacked",
+    "excel",
+    "debtorsExceptions.xlsx",
+  ); // refers to a function used to concatenate path segments into a single, valid path string,
+} else {
+  excelFilePath = path.join(process.cwd(), "excel", "debtorsExceptions.xlsx");
+}
+//console.log(excelFilePath)
+const workBook = XLSX.readFile(excelFilePath);
+const sheet = workBook.Sheets["Sheet1"];
+const data = XLSX.utils.sheet_to_json(sheet);
+
+export const getCustomers = async () => {
+  try {
+    const customers = await Customer.findAll({
+      attributes: ["Codigo", "Telefono", "Nombre_Representante"],
+      raw: true,
+    });
+    return { res: true, result: customers, message: "" };
+  } catch (error) {
+    return { res: false, result: undefined, message: error };
+  }
+};
+
+export const getExcCustomers = async () => {
+  const customersExceptions = () => {
+    const column0 = data.map((row) => row["clientes excepciones"]);
+    return column0;
+  };
+  //console.log('customers exc',customersExceptions())
+  return customersExceptions();
+};
+
+export const getDatesSent = async () => {
+  try {
+    const column1 = data.map((row) => row["dateSents"]);
+    return { res: true, result: column1, message: "" };
+  } catch (error) {
+    return { res: false, result: [], message: error };
+  }
+};
+
+export const updateExcCustomers = async (excC) => {
+  //console.log('exc customers', excC.length);
+  try {
+    // Limpiar el rango existente primero (opcional pero recomendado)
+    for (let rowNum = 2; rowNum <= 32; rowNum++) {
+      const cellAddress = "A" + rowNum;
+      if (sheet[cellAddress]) {
+        delete sheet[cellAddress];
+      }
+    }
+
+    // Escribir los nuevos valores
+    for (let rowNum = 0; rowNum < excC.length; rowNum++) {
+      const cellAddress = "A" + (rowNum + 2); // +2 para empezar en la fila 2
+      // Usar 's' para string o verificar el tipo de dato
+      sheet[cellAddress] = {
+        t: typeof excC[rowNum] === "number" ? "n" : "s",
+        v: excC[rowNum],
+      };
+    }
+
+    // Asegurar que el rango de la hoja esté definido
+    if (!sheet["!ref"]) {
+      sheet["!ref"] = "A1:A" + (excC.length + 1);
+    } else {
+      // Actualizar la referencia del rango
+      const range = XLSX.utils.decode_range(sheet["!ref"]);
+      range.e.r = Math.max(range.e.r, excC.length + 1);
+      sheet["!ref"] = XLSX.utils.encode_range(range);
+    }
+
+    XLSX.writeFile(workBook, excelFilePath);
+    return { res: true, result: [], message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, result: [], message: error.message };
+  }
+};
+
+export const sendMsgFromExcel = async (excelDir) => {
+  try {
+    const wookbook = XLSX.readFile(excelDir);
+    const sheet = wookbook.Sheets["Sheet1"];
+    const data = XLSX.utils.sheet_to_json(sheet);
+    console.log(data);
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const normalizeKey = (k) =>
+  k
+    .toString()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(
+      /[áéíóúñ]/g,
+      (c) => ({ á: "a", é: "e", í: "i", ó: "o", ú: "u", ñ: "n" })[c],
+    );
+
+export const sendMsg = async (client, debtorsToSendMsg, msgTemplate) => {
+  const result = { enviados: [], fallidos: [] };
+
+  const normalizePhone = (raw) => {
+    const s = (raw == null ? "" : String(raw)).trim();
+    if (!s) return { valid: false, reason: "vacío" };
+    const lower = s.toLowerCase();
+    if (lower === "null" || lower === "undefined")
+      return { valid: false, reason: "valor literal null/undefined" };
+    let digits = s.replace(/[^0-9]/g, "");
+    if (!digits) return { valid: false, reason: "sin dígitos" };
+    if (digits.length === 10) digits = "1" + digits;
+    if (digits.length === 11 && digits.startsWith("1")) {
+      return { valid: true, phone: digits + "@c.us" };
+    }
+    return { valid: false, reason: `longitud inválida: ${digits.length}` };
+  };
+
+  for (let i = 0; i < (debtorsToSendMsg || []).length; i++) {
+    const row = debtorsToSendMsg[i];
+    const norm = {};
+    for (const key of Object.keys(row || {}))
+      norm[normalizeKey(key)] = row[key];
+
+    const name =
+      row.name ||
+      row.Nombre_Cliente ||
+      row.Nombre_Representante ||
+      norm["nombrecliente"] ||
+      norm["nombrerepresentante"] ||
+      norm["nombre"] ||
+      norm["name"] ||
+      "Cliente";
+    const rawTel =
+      row.telephone ||
+      row.phone ||
+      row.Telefono ||
+      norm["telefono"] ||
+      norm["phone"] ||
+      "";
+    const remainingDebt =
+      row.remainingDebt ||
+      row.remainingdebt ||
+      row.restante ||
+      row.Balance ||
+      norm["balancependiente"] ||
+      norm["restante"] ||
+      norm["balance"] ||
+      norm["saldo"] ||
+      "";
+
+    const normalized = normalizePhone(rawTel);
+    if (!normalized.valid) {
+      console.warn("Teléfono inválido para", name, rawTel, normalized.reason);
+      result.fallidos.push({
+        name,
+        number: rawTel,
+        remainingDebt,
+        reason: normalized.reason,
+      });
+      continue;
+    }
+
+    const numberCorrected = normalized.phone;
+    try {
+      let msg = msgTemplate || "lorem ipsum";
+      msg = msg
+        .replace(/{name}/g, name)
+        .replace(/{telephone}/g, rawTel)
+        .replace(/{remainingDebt}/g, remainingDebt);
+      await client.sendMessage(numberCorrected, msg);
+      result.enviados.push({ name, number: numberCorrected, remainingDebt });
+    } catch (error) {
+      console.error(
+        "Error sending to",
+        numberCorrected,
+        error && error.message ? error.message : error,
+      );
+      result.fallidos.push({
+        name,
+        number: numberCorrected,
+        remainingDebt,
+        reason: error && error.message ? error.message : String(error),
+      });
+    }
+  }
+  return result;
+};

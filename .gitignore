@@ -1,0 +1,12 @@
+.wwebjs_cache
+build/
+node_modules/
+out/
+.env
+.gitignore
+AGENTS.md
+prompts/
+TIKTOK_SLIDES.md
+dist/
+build/
+.eslintcache
