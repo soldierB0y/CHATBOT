@@ -393,6 +393,8 @@ export const Home = () => {
         dbStep={cs.dbStep}
         setDbStep={cs.setDbStep}
         dbStatus={cs.dbStatus}
+        databases={cs.databases}
+        tables={cs.tables}
         testConnection={cs.testConnection}
         loadDbData={cs.loadDbData}
         saveDbConfig={cs.saveDbConfig}
@@ -423,6 +425,7 @@ export const Home = () => {
       <TemplateEditor
         messageTemplate={cs.messageTemplate}
         saveMessageTemplate={cs.saveMessageTemplate}
+        sourceType={cs.sourceType}
         columns={cs.columns}
         addFeedback={cs.addFeedback}
       />

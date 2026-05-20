@@ -1,3 +1,11 @@
+const csvEscape = (val) => {
+  const s = val == null ? "" : String(val);
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+};
+
 export const ClientPreview = ({ filteredData, columns }) => {
   if (filteredData.length === 0) {
     return (
@@ -8,6 +16,24 @@ export const ClientPreview = ({ filteredData, columns }) => {
       </div>
     );
   }
+
+  const exportCSV = () => {
+    const header = columns.map(csvEscape).join(",");
+    const rows = filteredData.map((row) =>
+      columns.map((col) => csvEscape(row[col])).join(","),
+    );
+    const bom = "\uFEFF";
+    const csv = bom + header + "\n" + rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "wbot_export_" + Date.now() + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const displayCols = columns;
 
@@ -22,6 +48,22 @@ export const ClientPreview = ({ filteredData, columns }) => {
       }}
     >
       <h4>Vista previa ({filteredData.length} clientes)</h4>
+      <button
+        onClick={exportCSV}
+        style={{
+          alignSelf: "flex-start",
+          padding: "6px 20px",
+          cursor: "pointer",
+          background: "#3b82f6",
+          color: "white",
+          border: "none",
+          borderRadius: "6px",
+          fontWeight: 600,
+          fontSize: "13px",
+        }}
+      >
+        Exportar a CSV
+      </button>
       <div
         style={{
           maxHeight: "350px",

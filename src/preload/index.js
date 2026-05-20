@@ -26,6 +26,9 @@ const api = {
   getDateSends: () => ipcRenderer.invoke("getDateSends"),
   testDbConnection: (dbConfig) =>
     ipcRenderer.invoke("testDbConnection", dbConfig),
+  getDatabases: (dbConfig) => ipcRenderer.invoke("getDatabases", dbConfig),
+  getTables: (dbConfig, database) =>
+    ipcRenderer.invoke("getTables", dbConfig, database),
   getTableRows: (dbConfig, tableName) =>
     ipcRenderer.invoke("getTableRows", dbConfig, tableName),
   parseExcelBuffer: (uint8arr) =>

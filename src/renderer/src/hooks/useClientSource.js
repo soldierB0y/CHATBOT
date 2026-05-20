@@ -3,6 +3,9 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 const DEFAULT_TEMPLATE =
   "Hola {name}, le recordamos que tiene un saldo pendiente de {remainingDebt}. Por favor realice el pago lo antes posible. Gracias.";
 
+const CONTACTS_TEMPLATE =
+  "Hola {name}, le escribimos de Ferretería Yenri para recordarle nuestros productos y servicios. Gracias.";
+
 function normalizeKey(k) {
   return k
     .toString()
@@ -106,6 +109,28 @@ export function useClientSource() {
     saveLS("sourceType", sourceType);
   }, [sourceType]);
 
+  useEffect(() => {
+    setRawData([]);
+    setColumns([]);
+    setFile(null);
+    setFileUrl("");
+    setSendResults({ enviados: [], fallidos: [] });
+    if (sourceType !== "db") {
+      setDbConnected(false);
+      setDbStep("host");
+      setDbStatus("");
+    }
+    const currentTemplate =
+      localStorage.getItem("msgTemplate") || DEFAULT_TEMPLATE;
+    if (
+      sourceType === "contacts" &&
+      currentTemplate.includes("{remainingDebt}")
+    ) {
+      setMessageTemplate(CONTACTS_TEMPLATE);
+      localStorage.setItem("msgTemplate", CONTACTS_TEMPLATE);
+    }
+  }, [sourceType]);
+
   const [dbHost, setDbHost] = useState(() => LS("dbHost", "localhost"));
   const [dbPort, setDbPort] = useState(() => LS("dbPort", "3306"));
   const [dbUser, setDbUser] = useState(() => LS("dbUser", ""));
@@ -116,6 +141,8 @@ export function useClientSource() {
   const [dbConnected, setDbConnected] = useState(false);
   const [dbStep, setDbStep] = useState(() => LS("dbStep", "host"));
   const [dbStatus, setDbStatus] = useState("");
+  const [databases, setDatabases] = useState([]);
+  const [tables, setTables] = useState([]);
 
   const saveDbConfig = useCallback(() => {
     saveLS("dbHost", dbHost);
@@ -286,6 +313,28 @@ export function useClientSource() {
     [authDbConfig, dbName],
   );
 
+  const fetchDatabases = useCallback(async () => {
+    const r = await window.api.getDatabases(authDbConfig);
+    if (r.res) {
+      setDatabases(r.result || []);
+    }
+  }, [authDbConfig]);
+
+  const fetchTables = useCallback(
+    async (db) => {
+      if (!db) return;
+      const r = await window.api.getTables(authDbConfig, db);
+      if (r.res) {
+        setTables(r.result || []);
+      }
+    },
+    [authDbConfig],
+  );
+
+  useEffect(() => {
+    if (dbName) fetchTables(dbName);
+  }, [dbName, fetchTables]);
+
   const testConnection = useCallback(async () => {
     if (!dbUser || !dbPassword) {
       setDbStatus("Ingrese usuario y contraseña");
@@ -297,14 +346,19 @@ export function useClientSource() {
       setDbConnected(true);
       setDbStep("dbselect");
       setDbStatus("Conectado");
+      setDbName("");
+      setDbTable("");
+      setDatabases([]);
+      setTables([]);
       addFeedback("Conexión exitosa a la base de datos", "success");
+      fetchDatabases();
       return true;
     }
     setDbConnected(false);
     setDbStatus("Error: " + r.message);
     addFeedback("Error de conexión: " + r.message, "error");
     return false;
-  }, [authDbConfig, dbUser, dbPassword, addFeedback]);
+  }, [authDbConfig, dbUser, dbPassword, addFeedback, fetchDatabases]);
 
   const loadDbData = useCallback(async () => {
     if (!dbConnected || !dbName || !dbTable) {
@@ -440,6 +494,10 @@ export function useClientSource() {
     setDbStep,
     dbStatus,
     setDbStatus,
+    databases,
+    tables,
+    fetchDatabases,
+    fetchTables,
     testConnection,
     loadDbData,
     saveDbConfig,

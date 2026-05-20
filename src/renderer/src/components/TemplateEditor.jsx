@@ -1,6 +1,7 @@
 export const TemplateEditor = ({
   messageTemplate,
   saveMessageTemplate,
+  sourceType,
   columns,
   addFeedback,
 }) => {
@@ -60,7 +61,10 @@ export const TemplateEditor = ({
         }}
       >
         <small style={{ color: "#666" }}>Variables:</small>
-        {columns.map((col) => (
+        {(sourceType === "contacts"
+          ? columns.filter((c) => c !== "remainingDebt")
+          : columns
+        ).map((col) => (
           <span
             key={col}
             onClick={() => insertVariable(col)}

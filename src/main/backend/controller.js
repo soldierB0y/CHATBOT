@@ -38,6 +38,34 @@ export const testConnection = async (config = {}) => {
   }
 };
 
+export const getDatabases = async (config = {}) => {
+  try {
+    const sequelize = createDynamicDB(config);
+    const [rows] = await sequelize.query("SHOW DATABASES");
+    await sequelize.close();
+    const dbs = rows
+      .map((r) => r.Database || Object.values(r)[0])
+      .filter(Boolean);
+    return { res: true, result: dbs, message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, result: [], message: error.message || String(error) };
+  }
+};
+
+export const getTables = async (config = {}, database) => {
+  try {
+    const sequelize = createDynamicDB({ ...config, database });
+    const [rows] = await sequelize.query("SHOW TABLES");
+    await sequelize.close();
+    const tables = rows.map((r) => Object.values(r)[0]).filter(Boolean);
+    return { res: true, result: tables, message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, result: [], message: error.message || String(error) };
+  }
+};
+
 export const getTableRows = async (config = {}, tableName) => {
   try {
     if (!tableName) {

@@ -21,30 +21,30 @@
 
 ## ✨ Características
 
-| Funcionalidad | Detalle |
-|---|---|
-| **🧩 Varias fuentes de Datos** | Carga desde archivos `.xlsx` o conexión dinámica a bases de datos MySQL |
-| **📝 Plantillas dinámicas** | Mensajes personalizados con variables `{name}`, `{telephone}`, `{remainingDebt}` |
-| **🔍 Filtro inteligente de balance** | Excluye automáticamente registros con saldo ≤ 0 |
-| **🚫 Lista de excepciones** | Exclusiones por ID desde archivo Excel dedicado |
-| **⚙️ Filtros personalizados** | Condiciones numéricas por columna (>, <, ≥, ≤, =, ≠) |
-| **📊 Vista previa de datos** | Tabla interactiva con los registros filtrados antes de enviar |
-| **📈 Barra de progreso** | Seguimiento en tiempo real del envío de mensajes |
-| **🔐 Autenticación QR** | Escaneo de código QR de WhatsApp Web integrado |
-| **💻 Multiplataforma** | Instaladores nativos para Windows, macOS y Linux |
+| Funcionalidad                        | Detalle                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| **🧩 Varias fuentes de Datos**       | Carga desde archivos `.xlsx` o conexión dinámica a bases de datos MySQL          |
+| **📝 Plantillas dinámicas**          | Mensajes personalizados con variables `{name}`, `{telephone}`, `{remainingDebt}` |
+| **🔍 Filtro inteligente de balance** | Excluye automáticamente registros con saldo ≤ 0                                  |
+| **🚫 Lista de excepciones**          | Exclusiones por ID desde archivo Excel dedicado                                  |
+| **⚙️ Filtros personalizados**        | Condiciones numéricas por columna (>, <, ≥, ≤, =, ≠)                             |
+| **📊 Vista previa de datos**         | Tabla interactiva con los registros filtrados antes de enviar                    |
+| **📈 Barra de progreso**             | Seguimiento en tiempo real del envío de mensajes                                 |
+| **🔐 Autenticación QR**              | Escaneo de código QR de WhatsApp Web integrado                                   |
+| **💻 Multiplataforma**               | Instaladores nativos para Windows, macOS y Linux                                 |
 
 ---
 
 ## 🛠️ Stack Tecnológico
 
-| Capa | Tecnología |
-|---|---|
-| **Frontend** | React 19, React Router v7, Vite |
-| **Backend (main process)** | Node.js, Electron 38 |
-| **WhatsApp API** | whatsapp-web.js + Puppeteer |
-| **Base de Datos** | MySQL 2 + Sequelize ORM |
-| **Excel** | SheetJS (xlsx) |
-| **Packaging** | electron-builder, electron-vite |
+| Capa                       | Tecnología                      |
+| -------------------------- | ------------------------------- |
+| **Frontend**               | React 19, React Router v7, Vite |
+| **Backend (main process)** | Node.js, Electron 38            |
+| **WhatsApp API**           | whatsapp-web.js + Puppeteer     |
+| **Base de Datos**          | MySQL 2 + Sequelize ORM         |
+| **Excel**                  | SheetJS (xlsx)                  |
+| **Packaging**              | electron-builder, electron-vite |
 
 ---
 
@@ -148,6 +148,3 @@ src/
 Las contribuciones son bienvenidas. Por favor abre un _issue_ o _pull request_ en el repositorio.
 
 ---
-
-
-

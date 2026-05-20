@@ -9,6 +9,8 @@ import path from "path";
 import puppeteer from "puppeteer";
 import {
   testConnection,
+  getDatabases,
+  getTables,
   getDebtorCustomers,
   getCustomers,
   getExcCustomers,
@@ -127,6 +129,12 @@ ipcMain.handle("getCustomers", async (e) => {
 ipcMain.handle("testDbConnection", async (e, config) => {
   return await testConnection(config);
 });
+ipcMain.handle("getDatabases", async (e, config) => {
+  return await getDatabases(config);
+});
+ipcMain.handle("getTables", async (e, config, database) => {
+  return await getTables(config, database);
+});
 ipcMain.handle("getTableRows", async (e, config, tableName) => {
   return await getTableRows(config, tableName);
 });
@@ -152,7 +160,6 @@ ipcMain.handle("getWhatsAppContacts", async () => {
     .map((c) => ({
       name: c.name || c.pushname || c.number,
       telephone: c.number,
-      remainingDebt: "0", // Default for contacts source
     }));
 });
 

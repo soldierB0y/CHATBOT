@@ -29,6 +29,8 @@ export const SourceConfig = ({
   dbStep,
   setDbStep,
   dbStatus,
+  databases,
+  tables,
   testConnection,
   loadDbData,
   saveDbConfig,
@@ -225,7 +227,11 @@ export const SourceConfig = ({
               style={{ height: "32px", padding: "6px" }}
             >
               <option value="">Seleccionar...</option>
-              <option value="sp_up_sys">sp_up_sys</option>
+              {databases.map((db) => (
+                <option key={db} value={db}>
+                  {db}
+                </option>
+              ))}
             </select>
           </div>
           <div
@@ -238,9 +244,11 @@ export const SourceConfig = ({
               style={{ height: "32px", padding: "6px" }}
             >
               <option value="">Seleccionar...</option>
-              <option value="clientes">clientes</option>
-              <option value="ventas">ventas</option>
-              <option value="ventas_articulos">ventas_articulos</option>
+              {tables.map((tbl) => (
+                <option key={tbl} value={tbl}>
+                  {tbl}
+                </option>
+              ))}
             </select>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>

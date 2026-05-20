@@ -35,8 +35,9 @@
     "@electron-toolkit/eslint-config": "^2.1.0",
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
     "@vitejs/plugin-react": "^5.0.3",
+    "baseline-browser-mapping": "^2.10.31",
     "electron": "^38.1.2",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^4.0.1",
     "eslint": "^9.36.0",
     "eslint-plugin-react": "^7.37.5",
@@ -45,6 +46,7 @@
     "prettier": "^3.6.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "typescript": "^6.0.3",
     "vite": "^7.1.6"
   },
   "files": [
