@@ -4,6 +4,7 @@ export const TemplateEditor = ({
   sourceType,
   columns,
   addFeedback,
+  aggregationAliases,
 }) => {
   const insertVariable = (variable) => {
     const ta = document.getElementById("template-textarea");
@@ -82,6 +83,28 @@ export const TemplateEditor = ({
             {`{${col}}`}
           </span>
         ))}
+        {aggregationAliases && aggregationAliases.length > 0 && (
+          <>
+            {aggregationAliases.map((alias) => (
+              <span
+                key={alias}
+                onClick={() => insertVariable(alias)}
+                style={{
+                  background: "#bbf7d0",
+                  color: "#166534",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  border: "1px solid #86efac",
+                }}
+              >
+                {`{${alias}}`}
+              </span>
+            ))}
+          </>
+        )}
       </div>
       <button
         onClick={() => {

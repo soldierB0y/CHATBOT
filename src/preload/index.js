@@ -19,8 +19,18 @@ const api = {
   isReady: (callback) => ipcRenderer.on("ready", (_, data) => callback(data)),
   getCustomers: () => ipcRenderer.invoke("getCustomers"),
   getExcCustomers: () => ipcRenderer.invoke("getExcCustomers"),
-  sendMsg: (msgTemplate, dbConfig, dbTable, debtorsArray) =>
-    ipcRenderer.invoke("sendMsg", msgTemplate, dbConfig, dbTable, debtorsArray),
+  sendMsg: (msgTemplate, dbConfig, dbTable, debtorsArray, intervalMs = 0) =>
+    ipcRenderer.invoke(
+      "sendMsg",
+      msgTemplate,
+      dbConfig,
+      dbTable,
+      debtorsArray,
+      intervalMs,
+    ),
+  onSendProgress: (callback) => ipcRenderer.on("sendProgress", callback),
+  offSendProgress: (callback) =>
+    ipcRenderer.removeListener("sendProgress", callback),
   getDebtors: (dbConfig, dbTable) =>
     ipcRenderer.invoke("getDebtors", dbConfig, dbTable),
   getDateSends: () => ipcRenderer.invoke("getDateSends"),
@@ -31,6 +41,10 @@ const api = {
     ipcRenderer.invoke("getTables", dbConfig, database),
   getTableRows: (dbConfig, tableName) =>
     ipcRenderer.invoke("getTableRows", dbConfig, tableName),
+  getTableColumns: (config, tableName) =>
+    ipcRenderer.invoke("getTableColumns", config, tableName),
+  getAggregatedData: (config, params) =>
+    ipcRenderer.invoke("getAggregatedData", config, params),
   parseExcelBuffer: (uint8arr) =>
     ipcRenderer.invoke("parseExcelBuffer", uint8arr),
   getWs: () => ipcRenderer.invoke("getWs"),

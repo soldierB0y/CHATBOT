@@ -1,5 +1,4 @@
-import { fn, literal, col, Op, QueryTypes, Sequelize } from "sequelize";
-import { DB } from "./db";
+import { fn, literal, col, QueryTypes, Sequelize } from "sequelize";
 import { Customer, Venta } from "./model";
 import * as XLSX from "xlsx";
 import path from "path";
@@ -75,6 +74,119 @@ export const getTableRows = async (config = {}, tableName) => {
     const rows = await sequelize.query(`SELECT * FROM \`${tableName}\``, {
       type: QueryTypes.SELECT,
     });
+    await sequelize.close();
+    return { res: true, result: rows, message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, result: [], message: error.message || String(error) };
+  }
+};
+
+export const getTableColumns = async (config, tableName) => {
+  try {
+    if (!tableName) {
+      return { res: false, result: [], message: "Debe indicar una tabla" };
+    }
+    const sequelize = createDynamicDB(config);
+    const [rows] = await sequelize.query(`SHOW COLUMNS FROM \`${tableName}\``);
+    await sequelize.close();
+    return { res: true, result: rows, message: "" };
+  } catch (error) {
+    console.log(error);
+    return { res: false, result: [], message: error.message || String(error) };
+  }
+};
+
+const buildAggregationTerm = (term) => {
+  if (term.operator) return ` ${term.operator} `;
+  if (!term.fn || !term.field) return "";
+  const field = `\`${term.field}\``;
+  const agg = `${term.fn}(${field})`;
+  return term.coalesce ? `COALESCE(${agg}, 0)` : agg;
+};
+
+export const getAggregatedData = async (config, params = {}) => {
+  try {
+    const {
+      primaryTable,
+      primaryKey,
+      secondaryTable,
+      foreignKey,
+      joinType = "LEFT JOIN",
+      aggregations = [],
+      havingExpr = "",
+      // Simplified debt calculation params
+      totalColumn,
+      abonoColumn,
+    } = params;
+
+    // New simplified format: calculate SUM(total) - SUM(abono) per client
+    if (totalColumn) {
+      if (!primaryTable || !secondaryTable || !primaryKey || !foreignKey) {
+        return {
+          res: false,
+          result: [],
+          message: "Parámetros incompletos para calcular deuda",
+        };
+      }
+      const abonoExpr = abonoColumn ? `- COALESCE(\`${abonoColumn}\`, 0)` : "";
+      const sql = `
+        SELECT pt.*, COALESCE(sub.deuda, 0) AS deuda
+        FROM \`${primaryTable}\` pt
+        LEFT JOIN (
+          SELECT \`${foreignKey}\`,
+            COALESCE(SUM(COALESCE(\`${totalColumn}\`, 0) ${abonoExpr}), 0) AS deuda
+          FROM \`${secondaryTable}\`
+          GROUP BY \`${foreignKey}\`
+        ) sub ON pt.\`${primaryKey}\` = sub.\`${foreignKey}\`
+      `;
+      const sequelize = createDynamicDB(config);
+      const [rows] = await sequelize.query(sql, { type: QueryTypes.SELECT });
+      await sequelize.close();
+      return { res: true, result: rows, message: "" };
+    }
+
+    // Legacy format
+    if (
+      !primaryTable ||
+      !secondaryTable ||
+      !primaryKey ||
+      !foreignKey ||
+      aggregations.length === 0
+    ) {
+      return {
+        res: false,
+        result: [],
+        message: "Parámetros incompletos para la consulta JOIN",
+      };
+    }
+
+    const subSelects = aggregations.map((agg) => {
+      const expr = agg.terms.map(buildAggregationTerm).join("");
+      return `${expr} AS \`${agg.alias}\``;
+    });
+
+    const outerSelects = aggregations
+      .map((agg) => `sub.\`${agg.alias}\``)
+      .join(", ");
+
+    let sql = `
+      SELECT pt.*, ${outerSelects}
+      FROM \`${primaryTable}\` pt
+      ${joinType} (
+        SELECT \`${foreignKey}\`,
+               ${subSelects.join(", ")}
+        FROM \`${secondaryTable}\`
+        GROUP BY \`${foreignKey}\`
+      ) sub ON pt.\`${primaryKey}\` = sub.\`${foreignKey}\`
+    `;
+
+    if (havingExpr.trim()) {
+      sql += ` HAVING ${havingExpr.trim()}`;
+    }
+
+    const sequelize = createDynamicDB(config);
+    const [rows] = await sequelize.query(sql, { type: QueryTypes.SELECT });
     await sequelize.close();
     return { res: true, result: rows, message: "" };
   } catch (error) {
@@ -290,7 +402,15 @@ const normalizeKey = (k) =>
       (c) => ({ á: "a", é: "e", í: "i", ó: "o", ú: "u", ñ: "n" })[c],
     );
 
-export const sendMsg = async (client, debtorsToSendMsg, msgTemplate) => {
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const sendMsg = async (
+  client,
+  debtorsToSendMsg,
+  msgTemplate,
+  intervalMs = 0,
+  progressCallback = () => {},
+) => {
   const result = { enviados: [], fallidos: [] };
 
   const normalizePhone = (raw) => {
@@ -360,6 +480,10 @@ export const sendMsg = async (client, debtorsToSendMsg, msgTemplate) => {
         .replace(/{name}/g, name)
         .replace(/{telephone}/g, rawTel)
         .replace(/{remainingDebt}/g, remainingDebt);
+      for (const [key, value] of Object.entries(row)) {
+        if (["name", "telephone", "remainingDebt"].includes(key)) continue;
+        msg = msg.replace(new RegExp(`{${key}}`, "g"), value ?? "");
+      }
       await client.sendMessage(numberCorrected, msg);
       result.enviados.push({ name, number: numberCorrected, remainingDebt });
     } catch (error) {
@@ -374,6 +498,11 @@ export const sendMsg = async (client, debtorsToSendMsg, msgTemplate) => {
         remainingDebt,
         reason: error && error.message ? error.message : String(error),
       });
+    }
+
+    progressCallback(i + 1, (debtorsToSendMsg || []).length);
+    if (intervalMs > 0 && i < (debtorsToSendMsg || []).length - 1) {
+      await wait(intervalMs);
     }
   }
   return result;

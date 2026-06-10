@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, webContents } from "electron";
+import { app, shell, BrowserWindow, ipcMain } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
@@ -20,6 +20,8 @@ import {
   sendMsgFromExcel,
   getTableRows,
   parseExcelBuffer,
+  getTableColumns,
+  getAggregatedData,
 } from "./backend/controller";
 
 //important variables
@@ -98,7 +100,7 @@ app.on("window-all-closed", () => {
 });
 
 //handles
-ipcMain.handle("getNewQR", async (e) => {
+ipcMain.handle("getNewQR", async () => {
   return newQr;
 });
 ipcMain.handle("getReadyState", async () => {
@@ -117,13 +119,13 @@ ipcMain.handle("closeSession", async () => {
     });
 });
 
-ipcMain.handle("getExcCustomers", async (e) => {
+ipcMain.handle("getExcCustomers", async () => {
   return await getExcCustomers();
 });
 ipcMain.handle("updateExcCustomers", async (event, excC) => {
   return await updateExcCustomers(excC);
 });
-ipcMain.handle("getCustomers", async (e) => {
+ipcMain.handle("getCustomers", async () => {
   return await getCustomers();
 });
 ipcMain.handle("testDbConnection", async (e, config) => {
@@ -138,7 +140,13 @@ ipcMain.handle("getTables", async (e, config, database) => {
 ipcMain.handle("getTableRows", async (e, config, tableName) => {
   return await getTableRows(config, tableName);
 });
-ipcMain.handle("getDateSends", async (e) => {
+ipcMain.handle("getTableColumns", async (e, config, tableName) => {
+  return await getTableColumns(config, tableName);
+});
+ipcMain.handle("getAggregatedData", async (e, config, params) => {
+  return await getAggregatedData(config, params);
+});
+ipcMain.handle("getDateSends", async () => {
   return await getDatesSent();
 });
 
@@ -155,11 +163,17 @@ ipcMain.handle("getMe", async () => {
 ipcMain.handle("getWhatsAppContacts", async () => {
   if (!client || !isClientReady) return [];
   const contacts = await client.getContacts();
+  const seen = new Set();
   return contacts
-    .filter((c) => c.isMyContact && !c.isGroup)
+    .filter((c) => c.isMyContact && c.isWAContact && !c.isGroup)
+    .filter((c) => {
+      if (seen.has(c.id.user)) return false;
+      seen.add(c.id.user);
+      return true;
+    })
     .map((c) => ({
-      name: c.name || c.pushname || c.number,
-      telephone: c.number,
+      name: c.name || c.pushname || c.id.user,
+      telephone: c.id.user,
     }));
 });
 
@@ -174,14 +188,29 @@ ipcMain.handle("getDebtors", async (e, config, tableName) => {
 
 ipcMain.handle(
   "sendMsg",
-  async (event, msgTemplate, dbConfig, dbTable, debtorsArray) => {
+  async (
+    event,
+    msgTemplate,
+    dbConfig,
+    dbTable,
+    debtorsArray,
+    intervalMs = 0,
+  ) => {
     const debtors =
       debtorsArray ||
       (dbConfig && dbTable
         ? (await getTableRows(dbConfig, dbTable)).result
         : await getDebtorsToSendMsg());
     const debtorsToSendMsg = (debtors || []).filter((d) => d != undefined);
-    const result = await sendMsg(client, debtorsToSendMsg, msgTemplate);
+    const result = await sendMsg(
+      client,
+      debtorsToSendMsg,
+      msgTemplate,
+      intervalMs,
+      (sent, total) => {
+        mainWindow.webContents.send("sendProgress", { sent, total });
+      },
+    );
     mainWindow.webContents.send("onMsgResult", result);
   },
 );

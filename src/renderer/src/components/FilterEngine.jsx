@@ -45,8 +45,15 @@ export const FilterEngine = ({
   setCustomFilters,
   saveCustomFilters,
   addFeedback,
+  hasDebtColumn,
+  filterZeroDebt,
+  setFilterZeroDebt,
+  showDebtSuggestion,
+  setShowDebtSuggestion,
+  onOpenDebtCalculator,
 }) => {
   const [inputNameValue, setInputNameValue] = useState("");
+  const [comboboxOpen, setComboboxOpen] = useState(false);
   const [updateResult, setUpdateResult] = useState("");
   const [searchField, setSearchField] = useState("");
   const [savedFiltersMsg, setSavedFiltersMsg] = useState("");
@@ -78,6 +85,8 @@ export const FilterEngine = ({
   const addException = (customer) => {
     if (!excCustomers.find((ec) => ec.Codigo === customer.Codigo)) {
       setExcCustomers([...excCustomers, customer]);
+      setInputNameValue("");
+      setComboboxOpen(false);
       if (addFeedback) addFeedback("Agregado a excepciones", "info");
     }
   };
@@ -142,6 +151,60 @@ export const FilterEngine = ({
         gap: "10px",
       }}
     >
+      {showDebtSuggestion && (
+        <div
+          style={{
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: "8px",
+            padding: "12px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            fontSize: "13px",
+          }}
+        >
+          <span style={{ fontSize: "18px" }}>💡</span>
+          <span style={{ flex: 1, color: "#1e40af" }}>
+            Se detect&oacute; la tabla <strong>ventas</strong>.
+            Config&uacute;rala para calcular la deuda real de cada cliente y
+            usar el filtro de saldo pendiente.
+          </span>
+          <button
+            onClick={() => {
+              setShowDebtSuggestion(false);
+              if (onOpenDebtCalculator) onOpenDebtCalculator();
+            }}
+            style={{
+              padding: "6px 14px",
+              cursor: "pointer",
+              background: "#2563eb",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: 600,
+              fontSize: "12px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Configurar ahora
+          </button>
+          <button
+            onClick={() => setShowDebtSuggestion(false)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "16px",
+              color: "#6b7280",
+              padding: "0 4px",
+            }}
+          >
+            &#10005;
+          </button>
+        </div>
+      )}
+
       {sourceType === "db" && hasData && hasExcData && (
         <>
           <h4>NO enviar a (Excepciones)</h4>
@@ -184,7 +247,14 @@ export const FilterEngine = ({
           {updateResult && <span>{updateResult}</span>}
 
           <h4>Agregar a la lista de excepci&oacute;n</h4>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
             <select
               value={searchField}
               onChange={(e) => setSearchField(e.target.value)}
@@ -196,51 +266,105 @@ export const FilterEngine = ({
                 </option>
               ))}
             </select>
-            <input
-              value={inputNameValue}
-              onChange={(e) => setInputNameValue(e.target.value)}
-              placeholder={
-                "Buscar por " + (FIELD_LABELS[searchField] || searchField)
-              }
-              style={{
-                height: "30px",
-                paddingLeft: "10px",
-                flex: 1,
-              }}
-            />
-          </div>
-          <div
-            style={{
-              maxHeight: "150px",
-              overflowY: "auto",
-              width: "90vw",
-              alignSelf: "flex-start",
-            }}
-          >
-            {filteredCustomers.map((c, i) => (
-              <div
-                key={i}
-                onClick={() => addException(c)}
-                style={{
-                  cursor: "pointer",
-                  padding: "3px 5px",
-                  userSelect: "none",
+            <div style={{ position: "relative", flex: 1 }}>
+              <input
+                value={inputNameValue}
+                onChange={(e) => {
+                  setInputNameValue(e.target.value);
+                  setComboboxOpen(true);
                 }}
-              >
-                {searchColumns.map((col) => (
-                  <span
-                    key={col}
-                    style={{ marginRight: "12px", fontSize: "13px" }}
+                onFocus={() => inputNameValue && setComboboxOpen(true)}
+                onBlur={() => setTimeout(() => setComboboxOpen(false), 200)}
+                placeholder={
+                  "Buscar por " + (FIELD_LABELS[searchField] || searchField)
+                }
+                style={{
+                  height: "30px",
+                  paddingLeft: "10px",
+                  width: "100%",
+                  boxSizing: "border-box",
+                }}
+              />
+              {comboboxOpen &&
+                inputNameValue &&
+                filteredCustomers.length > 0 && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 0,
+                      right: 0,
+                      maxHeight: "180px",
+                      overflowY: "auto",
+                      background: "#fff",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "4px",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                      zIndex: 50,
+                    }}
                   >
-                    <strong>{FIELD_LABELS[col] || col}:</strong>{" "}
-                    {c[col] != null ? String(c[col]) : "-"}
-                  </span>
-                ))}
-              </div>
-            ))}
+                    {filteredCustomers.map((c, i) => (
+                      <div
+                        key={i}
+                        onMouseDown={() => addException(c)}
+                        style={{
+                          cursor: "pointer",
+                          padding: "6px 10px",
+                          fontSize: "13px",
+                          borderBottom:
+                            i < filteredCustomers.length - 1
+                              ? "1px solid #f3f4f6"
+                              : "none",
+                          background: "#fff",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.background = "#f3f4f6")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.background = "#fff")
+                        }
+                      >
+                        {searchColumns.map((col) => (
+                          <span key={col} style={{ marginRight: "12px" }}>
+                            <strong>{FIELD_LABELS[col] || col}:</strong>{" "}
+                            {c[col] != null ? String(c[col]) : "-"}
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </div>
           </div>
         </>
       )}
+
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          fontSize: "13px",
+          cursor: hasDebtColumn ? "pointer" : "not-allowed",
+          fontWeight: 500,
+          opacity: hasDebtColumn ? 1 : 0.5,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={filterZeroDebt}
+          onChange={(e) => hasDebtColumn && setFilterZeroDebt(e.target.checked)}
+          disabled={!hasDebtColumn}
+          style={{
+            width: "16px",
+            height: "16px",
+            cursor: hasDebtColumn ? "pointer" : "not-allowed",
+          }}
+        />
+        {hasDebtColumn
+          ? "Solo clientes con deuda pendiente (deuda &gt; 0)"
+          : "Configura el c\u00e1lculo desde la tabla de ventas para filtrar por deuda pendiente"}
+      </label>
 
       <h4>Filtros personalizados</h4>
       {customFilters.map((f, i) => (
@@ -269,12 +393,13 @@ export const FilterEngine = ({
             onChange={(e) => updateFilter(i, "operator", e.target.value)}
             style={{ height: "32px", padding: "4px" }}
           >
-            <option value=">">&gt;</option>
-            <option value="<">&lt;</option>
-            <option value=">=">&gt;=</option>
-            <option value="<=">&lt;=</option>
-            <option value="==">==</option>
-            <option value="!=">!=</option>
+            <option value=">">{"> mayor que"}</option>
+            <option value="<">{"< menor que"}</option>
+            <option value=">=">{">= mayor o igual que"}</option>
+            <option value="<=">{"<= menor o igual que"}</option>
+            <option value="==">{"== es igual a"}</option>
+            <option value="!=">{"!= es diferente de"}</option>
+            <option value="contains">contiene</option>
           </select>
           <input
             value={f.value}

@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SourceSelector } from "./SourceSelector";
 import { SourceConfig } from "./SourceConfig";
+import { DebtCalculator } from "./DebtCalculator";
 import { FilterEngine } from "./FilterEngine";
 import { ClientPreview } from "./ClientPreview";
 import { TemplateEditor } from "./TemplateEditor";
+import { PhoneColumnSelector } from "./PhoneColumnSelector";
 import { ActionFooter } from "./ActionFooter";
 import { LoadingScreen } from "./LoadingScreen";
 import { useClientSource } from "../hooks/useClientSource";
@@ -17,6 +19,8 @@ export const Home = () => {
   const [wsLoadingMsg, setWsLoadingMsg] = useState("Iniciando WhatsApp...");
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showUserInfo, setShowUserInfo] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [triggerAutoExpand, setTriggerAutoExpand] = useState(false);
 
   useEffect(() => {
     window.api.onSessionClose((e, data) => {
@@ -52,9 +56,9 @@ export const Home = () => {
           zIndex: 100,
         }}
       >
-        <div style={{ position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <button
-            onClick={() => setShowUserMenu(!showUserMenu)}
+            onClick={() => setShowSettings(true)}
             style={{
               padding: "8px 16px",
               cursor: "pointer",
@@ -69,98 +73,128 @@ export const Home = () => {
             }}
           >
             <svg
-              width="20"
-              height="20"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
             >
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 20c0-4 4-7 8-7s8 3 8 7" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              style={{
-                transform: showUserMenu ? "rotate(180deg)" : "none",
-                transition: "transform 0.2s",
-              }}
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            Configuración
           </button>
-          {showUserMenu && (
-            <div
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
               style={{
-                position: "absolute",
-                top: "100%",
-                right: 0,
-                marginTop: "8px",
+                padding: "8px 16px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
                 background: "#fff",
                 border: "1px solid #ddd",
                 borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                minWidth: "180px",
-                overflow: "hidden",
+                fontSize: "14px",
+                fontWeight: 500,
               }}
             >
-              <button
-                onClick={() => {
-                  setShowUserMenu(false);
-                  setShowUserInfo(true);
-                }}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  border: "none",
-                  background: "#fff",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "#f3f4f6")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "#fff")
-                }
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
               >
-                Informacion de Usuario
-              </button>
-              <div style={{ height: "1px", background: "#eee" }} />
-              <button
-                onClick={() => {
-                  setShowUserMenu(false);
-                  window.api.closeSession();
-                }}
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 20c0-4 4-7 8-7s8 3 8 7" />
+              </svg>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
                 style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  border: "none",
-                  background: "#fff",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  color: "#dc2626",
+                  transform: showUserMenu ? "rotate(180deg)" : "none",
+                  transition: "transform 0.2s",
                 }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "#fef2f2")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "#fff")
-                }
               >
-                Cerrar Sesion
-              </button>
-            </div>
-          )}
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {showUserMenu && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  right: 0,
+                  marginTop: "8px",
+                  background: "#fff",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  minWidth: "180px",
+                  overflow: "hidden",
+                }}
+              >
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setShowUserInfo(true);
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    border: "none",
+                    background: "#fff",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = "#f3f4f6")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "#fff")
+                  }
+                >
+                  Informacion de Usuario
+                </button>
+                <div style={{ height: "1px", background: "#eee" }} />
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    window.api.closeSession();
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    border: "none",
+                    background: "#fff",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#dc2626",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = "#fef2f2")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "#fff")
+                  }
+                >
+                  Cerrar Sesion
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -315,6 +349,106 @@ export const Home = () => {
           </div>
         </div>
       )}
+
+      {showSettings && (
+        <div
+          onClick={() => setShowSettings(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(520px, 95vw)",
+              background: "#fff",
+              borderRadius: "14px",
+              padding: "24px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.18)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "20px",
+              }}
+            >
+              <h3 style={{ margin: 0 }}>Configuración de envío</h3>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "22px",
+                  color: "#666",
+                }}
+              >
+                &#10005;
+              </button>
+            </div>
+            <p style={{ marginBottom: "16px", color: "#4b5563" }}>
+              Ajusta el intervalo de espera entre cada mensaje para evitar
+              bloqueos y controlar el ritmo de envío.
+            </p>
+            <label
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                marginBottom: "20px",
+                fontSize: "14px",
+                color: "#374151",
+              }}
+            >
+              Intervalo entre mensajes (segundos)
+              <input
+                type="number"
+                value={cs.sendIntervalSeconds}
+                min={0}
+                step={0.5}
+                onChange={(e) =>
+                  cs.setSendIntervalSeconds(
+                    Number(e.target.value) >= 0 ? Number(e.target.value) : 0,
+                  )
+                }
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  border: "1px solid #d1d5db",
+                  width: "100%",
+                  maxWidth: "160px",
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  padding: "10px 20px",
+                  background: "#2563eb",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header
         style={{
           display: "flex",
@@ -408,6 +542,29 @@ export const Home = () => {
         loadWhatsAppContacts={cs.loadWhatsAppContacts}
         contactsCount={cs.contactsCount}
       />
+      <DebtCalculator
+        sourceType={cs.sourceType}
+        dbTable={cs.dbTable}
+        tables={cs.tables}
+        secondaryTable={cs.secondaryTable}
+        setSecondaryTable={cs.setSecondaryTable}
+        foreignKey={cs.foreignKey}
+        setForeignKey={cs.setForeignKey}
+        totalColumn={cs.totalColumn}
+        setTotalColumn={cs.setTotalColumn}
+        abonoColumn={cs.abonoColumn}
+        setAbonoColumn={cs.setAbonoColumn}
+        filterZeroDebt={cs.filterZeroDebt}
+        setFilterZeroDebt={cs.setFilterZeroDebt}
+        fetchTableColumns={cs.fetchTableColumns}
+        loadDebtData={cs.loadDebtData}
+        resetJoinConfig={cs.resetJoinConfig}
+        addFeedback={cs.addFeedback}
+        isLoading={cs.isLoading}
+        hasDebtData={cs.columns.includes("deuda")}
+        autoExpand={triggerAutoExpand}
+        onAutoExpanded={() => setTriggerAutoExpand(false)}
+      />
       <FilterEngine
         sourceType={cs.sourceType}
         allCustomers={cs.allCustomers}
@@ -420,6 +577,18 @@ export const Home = () => {
         saveCustomFilters={cs.saveCustomFilters}
         rawData={cs.rawData}
         addFeedback={cs.addFeedback}
+        filterZeroDebt={cs.filterZeroDebt}
+        setFilterZeroDebt={cs.setFilterZeroDebt}
+        hasDebtColumn={cs.columns.includes("deuda")}
+        showDebtSuggestion={cs.showDebtSuggestion}
+        setShowDebtSuggestion={cs.setShowDebtSuggestion}
+        onOpenDebtCalculator={() => setTriggerAutoExpand(true)}
+      />
+      <PhoneColumnSelector
+        sourceType={cs.sourceType}
+        columns={cs.columns}
+        phoneColumn={cs.phoneColumn}
+        setPhoneColumn={cs.setPhoneColumn}
       />
       <ClientPreview filteredData={cs.filteredData} columns={cs.columns} />
       <TemplateEditor
@@ -428,6 +597,7 @@ export const Home = () => {
         sourceType={cs.sourceType}
         columns={cs.columns}
         addFeedback={cs.addFeedback}
+        aggregationAliases={cs.debtAliases}
       />
       <ActionFooter
         sourceType={cs.sourceType}
@@ -436,6 +606,7 @@ export const Home = () => {
         isSending={cs.isSending}
         sendMessages={cs.sendMessages}
         sendResults={cs.sendResults}
+        sendProgress={cs.sendProgress}
       />
 
       {isWsLoading && <LoadingScreen message={wsLoadingMsg} />}

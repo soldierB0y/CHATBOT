@@ -39,6 +39,24 @@ function findBalanceColumn(columns) {
   return null;
 }
 
+function findPhoneColumn(columns) {
+  const keywords = [
+    "telefono",
+    "phone",
+    "numero",
+    "number",
+    "tel",
+    "celular",
+    "movil",
+    "cel",
+  ];
+  for (const col of columns) {
+    const key = normalizeKey(col);
+    if (keywords.some((kw) => key.includes(kw))) return col;
+  }
+  return columns.length > 0 ? columns[0] : null;
+}
+
 function findIdColumn(columns) {
   const idKeywords = [
     "codigo",
@@ -90,7 +108,8 @@ function extractRowFields(row) {
 
 const LS = (key, fallback) => () => {
   try {
-    return JSON.parse(localStorage.getItem("wbot_" + key));
+    const val = JSON.parse(localStorage.getItem("wbot_" + key));
+    return val ?? fallback;
   } catch {
     return localStorage.getItem("wbot_" + key) ?? fallback;
   }
@@ -109,6 +128,30 @@ export function useClientSource() {
     saveLS("sourceType", sourceType);
   }, [sourceType]);
 
+  const [secondaryTable, setSecondaryTable] = useState(
+    () => LS("joinConfig", {})().secondaryTable || "",
+  );
+  const [foreignKey, setForeignKey] = useState(
+    () => LS("joinConfig", {})().foreignKey || "",
+  );
+  const [totalColumn, setTotalColumn] = useState(
+    () => LS("joinConfig", {})().totalColumn || "",
+  );
+  const [abonoColumn, setAbonoColumn] = useState(
+    () => LS("joinConfig", {})().abonoColumn || "",
+  );
+  const [filterZeroDebt, setFilterZeroDebt] = useState(
+    () => LS("joinConfig", {}).filterZeroDebt !== false,
+  );
+
+  const resetJoinConfig = useCallback(() => {
+    setSecondaryTable("");
+    setForeignKey("");
+    setTotalColumn("");
+    setAbonoColumn("");
+    setFilterZeroDebt(true);
+  }, []);
+
   useEffect(() => {
     setRawData([]);
     setColumns([]);
@@ -119,6 +162,7 @@ export function useClientSource() {
       setDbConnected(false);
       setDbStep("host");
       setDbStatus("");
+      resetJoinConfig();
     }
     const currentTemplate =
       localStorage.getItem("msgTemplate") || DEFAULT_TEMPLATE;
@@ -129,7 +173,7 @@ export function useClientSource() {
       setMessageTemplate(CONTACTS_TEMPLATE);
       localStorage.setItem("msgTemplate", CONTACTS_TEMPLATE);
     }
-  }, [sourceType]);
+  }, [sourceType, resetJoinConfig]);
 
   const [dbHost, setDbHost] = useState(() => LS("dbHost", "localhost"));
   const [dbPort, setDbPort] = useState(() => LS("dbPort", "3306"));
@@ -183,11 +227,33 @@ export function useClientSource() {
     () => localStorage.getItem("msgTemplate") || DEFAULT_TEMPLATE,
   );
 
+  const [sendIntervalSeconds, setSendIntervalSeconds] = useState(() =>
+    LS("sendIntervalSeconds", 2),
+  );
+  useEffect(() => {
+    saveLS("sendIntervalSeconds", sendIntervalSeconds);
+  }, [sendIntervalSeconds]);
+
   const [sendResults, setSendResults] = useState({
     enviados: [],
     fallidos: [],
   });
   const [isSending, setIsSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState({ sent: 0, total: 0 });
+
+  const detectedPhoneColumn = useMemo(
+    () => findPhoneColumn(columns),
+    [columns],
+  );
+  const [phoneColumn, setPhoneColumn] = useState("");
+
+  useEffect(() => {
+    if (sourceType === "contacts") {
+      setPhoneColumn("telephone");
+    } else if (detectedPhoneColumn) {
+      setPhoneColumn(detectedPhoneColumn);
+    }
+  }, [sourceType, detectedPhoneColumn]);
 
   const [userInfo, setUserInfo] = useState(null);
   const [contactsCount, setContactsCount] = useState(null);
@@ -239,16 +305,27 @@ export function useClientSource() {
 
   const balanceColumn = useMemo(() => findBalanceColumn(columns), [columns]);
   const idColumn = useMemo(() => findIdColumn(columns), [columns]);
-
-  const excludedByBalance = 0;
+  const hasDebtColumn = useMemo(() => columns.includes("deuda"), [columns]);
+  const [showDebtSuggestion, setShowDebtSuggestion] = useState(false);
 
   const filteredData = useMemo(() => {
     let data = [...rawData];
     if (idColumn && exceptionIds.length > 0) {
       data = data.filter((r) => !exceptionIds.includes(String(r[idColumn])));
     }
+
+    if (filterZeroDebt && columns.includes("deuda")) {
+      data = data.filter((r) => {
+        const val = r["deuda"];
+        if (val == null || val === "") return false;
+        const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ""));
+        return !isNaN(num) && num > 0;
+      });
+    }
+
     for (const f of customFilters) {
       if (f.column && f.operator && f.value !== "") {
+        if (data.length > 0 && !(f.column in data[0])) continue;
         data = data.filter((r) => {
           const raw = r[f.column];
           const strVal = String(raw ?? "").trim();
@@ -256,48 +333,46 @@ export function useClientSource() {
           const isNum = !isNaN(numVal) && strVal.length > 0;
           if (isNum) {
             const fv = parseFloat(f.value);
-            if (isNaN(fv)) return true;
-            switch (f.operator) {
-              case ">":
-                return numVal > fv;
-              case "<":
-                return numVal < fv;
-              case ">=":
-                return numVal >= fv;
-              case "<=":
-                return numVal <= fv;
-              case "==":
-                return numVal === fv;
-              case "!=":
-                return numVal !== fv;
-              default:
-                return true;
+            if (!isNaN(fv)) {
+              switch (f.operator) {
+                case ">":
+                  return numVal > fv;
+                case "<":
+                  return numVal < fv;
+                case ">=":
+                  return numVal >= fv;
+                case "<=":
+                  return numVal <= fv;
+                case "==":
+                  return numVal === fv;
+                case "!=":
+                  return numVal !== fv;
+              }
             }
-          } else {
-            const lower = strVal.toLowerCase();
-            const filterLower = f.value.toLowerCase();
-            switch (f.operator) {
-              case "==":
-                return lower === filterLower;
-              case "!=":
-                return lower !== filterLower;
-              case ">":
-                return lower > filterLower;
-              case "<":
-                return lower < filterLower;
-              case ">=":
-                return lower >= filterLower;
-              case "<=":
-                return lower <= filterLower;
-              default:
-                return true;
-            }
+          }
+          const lower = strVal.toLowerCase();
+          const filterLower = f.value.toLowerCase();
+          switch (f.operator) {
+            case ">":
+              return lower > filterLower;
+            case "<":
+              return lower < filterLower;
+            case ">=":
+              return lower >= filterLower;
+            case "<=":
+              return lower <= filterLower;
+            case "==":
+              return lower === filterLower;
+            case "!=":
+              return lower !== filterLower;
+            case "contains":
+              return lower.includes(filterLower);
           }
         });
       }
     }
     return data;
-  }, [rawData, columns, idColumn, exceptionIds, customFilters]);
+  }, [rawData, columns, idColumn, exceptionIds, customFilters, filterZeroDebt]);
 
   const authDbConfig = useMemo(
     () => ({
@@ -444,6 +519,120 @@ export function useClientSource() {
     return r.res;
   }, []);
 
+  useEffect(() => {
+    if (
+      sourceType === "db" &&
+      !hasDebtColumn &&
+      columns.length > 0 &&
+      balanceColumn
+    ) {
+      const salesTable = tables.find(
+        (t) =>
+          t !== dbTable &&
+          (t.toLowerCase().includes("vent") ||
+            t.toLowerCase().includes("factur") ||
+            t.toLowerCase().includes("ventas")),
+      );
+      if (salesTable && !secondaryTable) {
+        setShowDebtSuggestion(true);
+      } else {
+        setShowDebtSuggestion(false);
+      }
+    } else {
+      setShowDebtSuggestion(false);
+    }
+  }, [
+    sourceType,
+    hasDebtColumn,
+    columns,
+    tables,
+    dbTable,
+    balanceColumn,
+    secondaryTable,
+  ]);
+
+  useEffect(() => {
+    saveLS("joinConfig", {
+      secondaryTable,
+      foreignKey,
+      totalColumn,
+      abonoColumn,
+      filterZeroDebt,
+    });
+  }, [secondaryTable, foreignKey, totalColumn, abonoColumn, filterZeroDebt]);
+
+  const fetchTableColumns = useCallback(
+    async (table) => {
+      if (!table) return [];
+      const r = await window.api.getTableColumns(fullDbConfig, table);
+      if (r.res) {
+        return r.result.map((c) => c.Field);
+      }
+      return [];
+    },
+    [fullDbConfig],
+  );
+
+  const loadDebtData = useCallback(async () => {
+    if (!secondaryTable || !foreignKey || !totalColumn) {
+      addFeedback(
+        "Seleccione la tabla de ventas, la columna del cliente y la columna del total",
+        "warning",
+      );
+      return;
+    }
+    const pk = findIdColumn(columns);
+    if (!pk) {
+      addFeedback(
+        "No se pudo identificar la columna ID del cliente en la tabla principal",
+        "error",
+      );
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const params = {
+        primaryTable: dbTable,
+        primaryKey: pk,
+        secondaryTable,
+        foreignKey,
+        totalColumn,
+        abonoColumn: abonoColumn || null,
+      };
+      const r = await window.api.getAggregatedData(fullDbConfig, params);
+      if (r.res) {
+        setRawData(r.result || []);
+        if (r.result && r.result.length > 0)
+          setColumns(Object.keys(r.result[0]));
+        setDbStatus(
+          (r.result ? r.result.length : 0) + " filas cargadas (con deuda)",
+        );
+        addFeedback(
+          "Deuda calculada: " + (r.result ? r.result.length : 0) + " registros",
+          "success",
+        );
+      } else {
+        addFeedback("Error al calcular deuda: " + r.message, "error");
+      }
+    } catch (err) {
+      addFeedback("Error al calcular deuda: " + err.message, "error");
+    }
+    setIsLoading(false);
+  }, [
+    dbTable,
+    secondaryTable,
+    foreignKey,
+    totalColumn,
+    abonoColumn,
+    fullDbConfig,
+    columns,
+    addFeedback,
+  ]);
+
+  const debtAliases = useMemo(() => {
+    return columns.includes("deuda") ? ["deuda"] : [];
+  }, [columns]);
+
   const saveMessageTemplate = useCallback((t) => {
     setMessageTemplate(t);
     localStorage.setItem("msgTemplate", t);
@@ -459,19 +648,42 @@ export function useClientSource() {
     }
     setIsSending(true);
     setSendResults({ enviados: [], fallidos: [] });
+    setSendProgress({ sent: 0, total: filteredData.length });
     addFeedback("Enviando " + filteredData.length + " mensajes...", "info");
     try {
       const debtors = filteredData.map((row) => {
-        const { name, telephone, remainingDebt } = extractRowFields(row);
-        return { name, telephone, remainingDebt };
+        const fields = extractRowFields(row);
+        const telephone = phoneColumn
+          ? String(row[phoneColumn] ?? "").trim()
+          : fields.telephone;
+        return {
+          ...row,
+          name: fields.name,
+          telephone,
+          remainingDebt: fields.remainingDebt,
+        };
       });
-      const r = await window.api.sendMsg(messageTemplate, null, null, debtors);
+      const r = await window.api.sendMsg(
+        messageTemplate,
+        null,
+        null,
+        debtors,
+        sendIntervalSeconds * 1000,
+      );
       if (r) setSendResults(r);
     } catch (err) {
       setSendResults({ enviados: [], fallidos: [], error: err.message });
       addFeedback("Error al enviar: " + err.message, "error");
+    } finally {
+      setIsSending(false);
     }
-  }, [filteredData, messageTemplate, addFeedback]);
+  }, [
+    filteredData,
+    messageTemplate,
+    addFeedback,
+    phoneColumn,
+    sendIntervalSeconds,
+  ]);
 
   return {
     sourceType,
@@ -523,13 +735,34 @@ export function useClientSource() {
     sendResults,
     isSending,
     sendMessages,
+    sendIntervalSeconds,
+    setSendIntervalSeconds,
+    sendProgress,
     addFeedback,
-    excludedByBalance,
     balanceColumn,
     idColumn,
+    hasDebtColumn,
+    showDebtSuggestion,
+    setShowDebtSuggestion,
     feedbacks,
     userInfo,
     loadWhatsAppContacts,
     contactsCount,
+    phoneColumn,
+    setPhoneColumn,
+    secondaryTable,
+    setSecondaryTable,
+    foreignKey,
+    setForeignKey,
+    totalColumn,
+    setTotalColumn,
+    abonoColumn,
+    setAbonoColumn,
+    filterZeroDebt,
+    setFilterZeroDebt,
+    resetJoinConfig,
+    fetchTableColumns,
+    loadDebtData,
+    debtAliases,
   };
 }

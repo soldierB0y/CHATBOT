@@ -7,6 +7,7 @@ export const ActionFooter = ({
   isSending,
   sendMessages,
   sendResults,
+  sendProgress,
 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -131,19 +132,52 @@ export const ActionFooter = ({
         >
           <div
             style={{
-              height: "8px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              fontSize: "13px",
+              marginBottom: "10px",
+              color: "#374151",
+            }}
+          >
+            <span>
+              Enviados {sendProgress.sent || 0} /{" "}
+              {sendProgress.total || filteredData.length}
+            </span>
+            <span>
+              {sendProgress.total
+                ? Math.min(
+                    100,
+                    Math.round((sendProgress.sent / sendProgress.total) * 100),
+                  )
+                : 0}
+              %
+            </span>
+          </div>
+          <div
+            style={{
+              height: "10px",
               background: "#e5e7eb",
-              borderRadius: "4px",
+              borderRadius: "5px",
               overflow: "hidden",
             }}
           >
             <div
               style={{
                 height: "100%",
-                width: "100%",
+                width: `${
+                  sendProgress.total
+                    ? Math.min(
+                        100,
+                        Math.round(
+                          (sendProgress.sent / sendProgress.total) * 100,
+                        ),
+                      )
+                    : 0
+                }%`,
                 background: "#3b82f6",
-                borderRadius: "4px",
-                animation: "progressPulse 1.5s ease-in-out infinite",
+                borderRadius: "5px",
+                transition: "width 0.2s ease",
               }}
             />
           </div>
